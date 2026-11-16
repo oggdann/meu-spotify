@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id);
 const state = { now: null, library: null, controller: null, spotifyController: null, spotifyReady: false, spotifyUri: null, provider: 'spotify', preferred: 'auto', api: null, loadedUri: null, selected: null, follow: true, wantsAudio: true, audible: false, ready: false, pendingPlay: false, playlistLimit: 8, recentLimit: 8, retryMs: 8000, failures: 0 };
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const iconNS = 'http://www.w3.org/2000/svg';
-let pollTimer, libraryTimer, autoplayTimer, toastTimer, iframeLoading = false, spotifyCreating = false;
+let pollTimer, libraryTimer, autoplayTimer, videoBufferTimer, toastTimer, iframeLoading = false, spotifyCreating = false;
 let selectionId = 0, youtubeLoading = false, youtubeReady = false, youtubePlayer = null, youtubePlayerReady = false, youtubeAdapter = null, youtubeUri = null, youtubeVideo = null, youtubeStarted = false;
 const videoMatches = new Map();
 
@@ -164,7 +164,7 @@ function attemptPlay() {
 function showProvider(provider) {
   const old = state.controller;
   state.provider = provider; state.audible = false; state.ready = false;
-  old?.pause(); clearTimeout(autoplayTimer);
+  old?.pause(); clearTimeout(autoplayTimer); clearTimeout(videoBufferTimer);
   $('spotify-player').hidden = provider !== 'spotify'; $('youtube-player').hidden = provider !== 'youtube';
   $('player-dock').classList.toggle('youtube-active', provider === 'youtube');
   document.body.classList.toggle('has-youtube', provider === 'youtube');
@@ -204,6 +204,7 @@ function youtubeFailure() {
 }
 function youtubeState(event) {
   if (state.provider !== 'youtube') return;
+  clearTimeout(videoBufferTimer);
   if (event.data === 1) {
     youtubeStarted = true; state.audible = true; state.wantsAudio = true; clearTimeout(autoplayTimer);
     $('player-state').textContent = 'Som ligado';
@@ -213,6 +214,12 @@ function youtubeState(event) {
     if (event.data === 2 && wasAudible && youtubeStarted) state.wantsAudio = false;
     if (event.data === 0) { state.wantsAudio = false; $('player-state').textContent = 'Faixa terminou'; }
     else $('player-state').textContent = event.data === 3 ? 'Carregando som…' : (state.wantsAudio ? 'Ativar som' : 'Som pausado');
+    if (event.data === 3) {
+      const uri = state.loadedUri;
+      videoBufferTimer = setTimeout(() => {
+        if (state.provider === 'youtube' && state.loadedUri === uri && state.wantsAudio && !state.audible) youtubeFailure();
+      }, 15000);
+    }
   }
   updateButton();
 }
@@ -223,7 +230,7 @@ function startYouTube() {
     youtubeAdapter = { play: () => { youtubePlayer?.playVideo(); }, pause: () => { youtubePlayer?.pauseVideo(); } };
     state.controller = youtubeAdapter;
     youtubePlayer = new YT.Player('youtube-embed', { host: 'https://www.youtube-nocookie.com', width: '100%', height: '270', videoId: youtubeVideo,
-      playerVars: { autoplay: state.wantsAudio ? 1 : 0, controls: 1, playsinline: 1, origin: location.origin },
+      playerVars: { autoplay: state.wantsAudio ? 1 : 0, controls: 1, playsinline: 1, rel: 0, origin: location.origin },
       events: {
         onReady: () => {
           youtubePlayerReady = true;
