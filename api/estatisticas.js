@@ -1,3 +1,4 @@
+import { measuredSnapshot } from '../lib/site-store.js';
 import { cached, getToken, imageUrl, publicTrack, readOnly, sendFailure, spotifyGet, spotifyUrl } from '../lib/spotify.js';
 
 export function summarizeRecent(items, now = Date.now()) {
@@ -50,7 +51,8 @@ export default async function handler(req, res) {
         recentAvailability: recent.status === 'fulfilled' ? 'ready' : recent.reason?.code || 'temporarily_unavailable',
         exactMinutesAvailability: 'extended_history_required', top, checkedAt: now };
     });
-    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
-    return res.status(200).json(data);
+    const measured = await measuredSnapshot();
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=30');
+    return res.status(200).json({...data, measured});
   } catch (error) { return sendFailure(res, error); }
 }

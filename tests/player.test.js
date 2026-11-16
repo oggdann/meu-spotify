@@ -221,9 +221,16 @@ test('YouTube waits for a visible video, resumes on return, and preserves delibe
 test('statistics do not show a fake minute total without full listening history',()=>{
   const h=playerHarness(()=>Promise.resolve(result(null)));
   h.context.stats={sampleSize:50,recentAvailability:'ready',periods:[{days:7,plays:12,estimatedMinutes:36,artists:[],tracks:[]}],top:{availability:'permission_required'}};
-  h.run('renderStats(stats)');
+  h.run('statsPeriod=7;renderStats(stats)');
   assert.equal(h.node('stats-minutes').textContent,'—');
-  assert.match(h.node('stats-minutes-status').textContent,/Histórico completo/);
+  assert.match(h.node('stats-minutes-status').textContent,/ainda não começou/);
   assert.match(h.node('stats-context').textContent,/recorte/);
-  assert.match(h.node('stats-footnote').textContent,/Não representa o total completo/);
+  assert.match(h.node('stats-footnote').textContent,/Não cobre necessariamente/);
+});
+test('real collector updates replace the placeholder and refresh the displayed minutes',()=>{
+  const h=playerHarness(()=>Promise.resolve(result(null)));
+  h.context.stats={recentAvailability:'ready',sampleSize:50,periods:[],top:{availability:'permission_required'},measured:{startedAt:Date.now()-3600000,updatedAt:Date.now(),periods:[{days:7,start:Date.now()-3600000,end:Date.now(),minutes:120,plays:40,artists:[],tracks:[]}]}};
+  h.run('statsPeriod=7;renderStats(stats)');assert.equal(h.node('stats-minutes').textContent,'120');assert.equal(h.node('stats-plays').textContent,'40');
+  h.run('stats.measured.periods[0].minutes=121;renderStats(stats)');assert.equal(h.node('stats-minutes').textContent,'121');
+  assert.match(h.node('stats-disclosure').textContent,/Pausas e saltos/);
 });

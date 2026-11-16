@@ -20,8 +20,8 @@
   <link rel="preconnect" href="https://i.scdn.co" crossorigin>
   <link rel="preconnect" href="https://www.youtube.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=ogg-20261116-4">
-  <script src="/app.js?v=ogg-20261116-4" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=ogg-20261116-5">
+  <script src="/app.js?v=ogg-20261116-5" defer></script>
 </head>
 <body>
   <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -41,7 +41,7 @@
   <div class="ambient" id="ambient" aria-hidden="true"></div><div class="music-field" aria-hidden="true"><i></i><i></i><i></i><span></span><div id="music-particles" class="music-particles"></div></div>
   <header class="topbar wrap">
     <a class="brand" href="#agora" aria-label="OGG — início"><img src="/assets/ogg-orbital.png" alt="OGG" width="1774" height="887"><span>MINHA FREQUÊNCIA<span class="brand-sub">CRIADO POR @oggdann</span></span></a>
-    <nav aria-label="Navegação principal"><a href="#agora" class="nav-link active">Agora</a><a href="#playlists" class="nav-link">Playlists</a><a href="#recentes" class="nav-link">Recentes</a></nav>
+    <nav aria-label="Navegação principal"><a href="#agora" class="nav-link active">Agora</a><a href="#playlists" class="nav-link">Playlists</a><a href="#numeros" class="nav-link">Minha escuta</a><a href="#presenca" class="nav-link">Mural</a></nav>
     <button class="round-btn immersive-toggle" id="immersive" aria-label="Ativar modo imersivo" aria-pressed="false" title="Modo imersivo"><svg><use href="#i-moon"/></svg></button>
   </header>
   <main class="wrap">
@@ -78,9 +78,9 @@
       <a class="outline-btn profile-link" id="profile-link" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer"><svg><use href="#i-spotify"/></svg>Meu perfil no Spotify<svg class="small-icon"><use href="#i-arrow"/></svg></a>
     </section>
     <section class="listening-stats content-section" id="numeros" aria-labelledby="stats-heading">
-      <div class="section-heading"><div><span class="eyebrow">MEU PLAY EM NÚMEROS</span><h2 id="stats-heading">Minha escuta <em>em números.</em></h2></div><div class="stats-periods" role="group" aria-label="Período das estatísticas"><button id="stats-week" aria-pressed="true">7 dias</button><button id="stats-month" aria-pressed="false">30 dias</button></div></div>
+      <div class="section-heading"><div><span class="eyebrow">MEU PLAY EM NÚMEROS</span><h2 id="stats-heading">Minha escuta <em>em números.</em></h2></div><div class="stats-periods" role="group" aria-label="Período das estatísticas"><button id="stats-week" aria-pressed="false">Semana</button><button id="stats-month" aria-pressed="true">Mês</button></div></div>
       <p class="stats-context" id="stats-context">Buscando os registros do meu Spotify…</p>
-      <div class="stats-metrics"><article><span>REPRODUÇÕES REGISTRADAS</span><strong id="stats-plays">—</strong></article><article><span>MINUTOS REAIS OUVIDOS</span><strong id="stats-minutes">—</strong><small id="stats-minutes-status">Histórico completo ainda não disponível</small></article></div>
+      <div class="stats-metrics"><article><span>MINUTOS REGISTRADOS</span><strong id="stats-minutes">—</strong><small id="stats-minutes-status">A contagem contínua ainda não começou</small></article><article><span id="stats-plays-label">PLAYS NO RECORTE RECENTE</span><strong id="stats-plays">—</strong><small id="stats-plays-status">Até 50 registros disponíveis</small></article></div>
       <p class="stats-disclosure" id="stats-disclosure">O ranking considera as últimas 50 reproduções disponíveis. Isso pode não cobrir o período inteiro. O total real de minutos ainda não está disponível.</p>
       <div class="stats-rankings"><article><h3>Artistas mais ouvidos</h3><ol id="stats-artists"><li class="stats-empty">Os artistas aparecem por aqui.</li></ol></article><article><h3>Músicas mais ouvidas</h3><ol id="stats-tracks"><li class="stats-empty">Os sons aparecem por aqui.</li></ol></article></div>
       <p class="stats-footnote" id="stats-footnote"></p>
@@ -96,7 +96,18 @@
       <div class="recent-list" id="recent-list" aria-live="polite"><p class="empty-state">Buscando as últimas faixas…</p></div>
       <button class="more-btn" id="more-recent" hidden>Ver mais recentes <span>↓</span></button>
     </section>
-    <footer class="footer content-section"><a href="#agora" aria-label="Voltar ao início"><img src="/assets/ogg-orbital.png" alt="OGG" width="1774" height="887"></a><p>Criado por Daniel Victor.<br><span>@oggdann / Feito do meu jeito.</span></p><a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">@oggdann <svg><use href="#i-arrow"/></svg></a></footer>
+    <section class="presence-section content-section" id="presenca" aria-labelledby="presence-heading">
+      <div class="presence-intro"><span class="eyebrow">QUEM COLOU NO MEU SOM</span><h2 id="presence-heading">Passou por aqui?<br><em>Deixa tua presença.</em></h2><p>Teu perfil do Spotify no mural de quem colou na frequência do OGG.</p></div>
+      <div class="presence-panel">
+        <div class="presence-wall" id="presence-wall" aria-live="polite"><p class="presence-empty">O mural tá aberto. O próximo nome pode ser o teu.</p></div>
+        <p class="presence-feedback" id="presence-feedback" role="status"></p>
+        <a class="primary-btn presence-login" id="presence-login" href="/api/presenca?acao=entrar"><svg aria-hidden="true"><use href="#i-spotify"/></svg>Entrar com Spotify<svg class="small-icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        <div class="presence-session" id="presence-session" hidden><p id="presence-greeting"></p><div class="presence-actions"><button class="primary-btn" id="presence-mark">Marcar minha presença</button><button class="presence-text-btn" id="presence-remove" hidden>Remover do mural</button><button class="presence-text-btn" id="presence-logout">Sair</button></div></div>
+        <p class="presence-privacy">Só teu nome, foto e link do perfil aparecem, depois que tu confirmar. Nenhuma playlist ou histórico teu é publicado.</p>
+        <details class="presence-access"><summary>Spotify · acesso em testes</summary><p>Por enquanto, o Spotify permite o login apenas de contas liberadas pelo OGG. Se tua conta não entrar, me chama no <a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">@oggdann</a>. O mural mostra as presenças dos últimos 30 dias.</p></details>
+      </div>
+    </section>
+    <footer class="footer content-section"><a href="#agora" aria-label="Voltar ao início"><img src="/assets/ogg-orbital.png" alt="OGG" width="1774" height="887"></a><p>Criado por Daniel Victor.<br><span>@oggdann / Feito do meu jeito.</span></p><a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">Meu Instagram <svg><use href="#i-arrow"/></svg></a></footer>
   </main>
   <aside class="player-dock collapsed" id="player-dock" aria-label="Player de música" hidden>
     <div class="dock-top"><div class="dock-heading"><svg><use href="#i-sound"/></svg><span id="player-context">OUVINDO COM OGG</span><span class="dock-track" id="dock-track"></span><span class="dock-state" id="player-state">Preparando player…</span></div><label class="follow-switch"><input type="checkbox" id="follow" checked><span class="switch-track"></span><span>Acompanhar trocas</span></label><button class="round-btn dock-play" id="dock-play" aria-label="Tentar ouvir música"><svg><use id="dock-play-icon" href="#i-play"/></svg></button><button class="round-btn collapse-btn" id="collapse-player" aria-label="Abrir controles de música" aria-expanded="false">⌄</button></div>

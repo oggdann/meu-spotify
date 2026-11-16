@@ -45,7 +45,8 @@ function externalLink(url, label) {
 }
 let paletteSource = null;
 const spectrumBars = [], musicParticles = [];
-let listeningStats = null, statsPeriod = 7;
+let listeningStats = null, statsPeriod = 30;
+let presenceSession = null, presenceItems = [], presenceBusy = false;
 function coverPalette(pixels) {
   const buckets = new Map();
   for (let i = 0; i < pixels.length; i += 4) {
@@ -542,14 +543,21 @@ async function pollNow() {
 }
 function renderStats(data) {
   listeningStats = data;
-  const period = data.periods?.find(item => item.days === statsPeriod);
+  const recent = data.periods?.find(item => item.days === statsPeriod);
+  const measured = data.measured?.periods?.find(item => item.days === statsPeriod);
+  const period = measured || recent;
+  const format = value => Number(value || 0).toLocaleString('pt-BR');
+  const date = value => new Date(value).toLocaleDateString('pt-BR', { day:'2-digit',month:'short',timeZone:'America/Bahia' });
   $('stats-week').setAttribute('aria-pressed', String(statsPeriod === 7));
   $('stats-month').setAttribute('aria-pressed', String(statsPeriod === 30));
-  $('stats-plays').textContent = data.recentAvailability === 'ready' ? String(period?.plays || 0) : '—';
-  $('stats-minutes').textContent = Number.isFinite(period?.minutes) ? String(period.minutes) : '—';
-  $('stats-minutes-status').textContent = Number.isFinite(period?.minutes) ? 'Tempo real informado no histórico' : 'Histórico completo ainda não disponível';
+  $('stats-plays').textContent = measured || data.recentAvailability === 'ready' ? format(period?.plays) : '—';
+  $('stats-plays-label').textContent = measured ? 'PLAYS REGISTRADOS' : 'PLAYS NO RECORTE RECENTE';
+  $('stats-plays-status').textContent = measured ? 'Reproduções acompanhadas por pelo menos 30 s' : 'Até ' + (data.sampleSize || 50) + ' registros disponíveis';
+  $('stats-minutes').textContent = measured ? format(measured.minutes) : '—';
+  $('stats-minutes-status').textContent = measured ? 'Tempo de reprodução acompanhado' : 'A contagem contínua ainda não começou';
   const official = statsPeriod === 30 && data.top?.availability === 'ready';
-  $('stats-context').textContent = official ? 'Rankings oficiais do Spotify · últimas 4 semanas. Os números abaixo continuam sendo do recorte recente.' : 'Últimos ' + statsPeriod + ' dias · recorte de até ' + (data.sampleSize || 50) + ' reproduções disponíveis.';
+  $('stats-context').textContent = measured ? (statsPeriod === 7 ? 'Esta semana' : 'Este mês') + ' · registros de ' + date(period.start) + ' a ' + date(period.end) + '.' : official ? 'Rankings oficiais do Spotify · últimas 4 semanas.' : 'Últimos 7 dias · ranking do recorte recente.';
+  $('stats-disclosure').textContent = measured ? 'Os minutos somam o tempo realmente acompanhado pelo registro contínuo. Pausas e saltos não viram minutos; períodos sem monitoramento ficam de fora.' : 'O Spotify não fornece o total de minutos da semana ou do mês por esta conexão. O recorte de até 50 plays não é o teu histórico completo.';
   for (const type of ['artists', 'tracks']) {
     const list = $('stats-' + type); list.replaceChildren();
     const entries = official ? data.top[type] : period?.[type] || [];
@@ -558,18 +566,19 @@ function renderStats(data) {
       row.append(el('span', 'stats-rank-number', String(index + 1).padStart(2, '0')));
       const link = externalLink(item.songUrl || item.url, item.title || item.name);
       link.className = 'stats-rank-link';
-      if (type === 'tracks' && item.albumImageUrl) {
-        const image = el('img'); image.src = safeUrl(item.albumImageUrl, true) || '/assets/ogg-orbital.png';
+      const artwork = item.albumImageUrl || item.image;
+      if (artwork) {
+        const image = el('img'); image.src = safeUrl(artwork, true) || '/assets/ogg-orbital.png';
         image.alt = ''; image.width = image.height = 36; image.loading = 'lazy';
         link.prepend(image);
       }
       row.append(link);
-      if (!official) row.append(el('span', 'stats-rank-count', String(item.count) + '×'));
+      if (!official) row.append(el('span', 'stats-rank-count', measured ? format(Math.floor(item.heardMs / 60000)) + ' min' : String(item.count) + '×'));
       list.append(row);
     });
     if (!entries.length) list.append(el('li', 'stats-empty', 'Sem registros neste recorte.'));
   }
-  $('stats-footnote').textContent = official ? 'Rankings oficiais do Spotify para as últimas 4 semanas. Os minutos reais ainda aguardam o histórico completo.' : 'Base: últimas 50 reproduções informadas pelo Spotify. Não representa o total completo da semana ou do mês.';
+  $('stats-footnote').textContent = (official ? 'Artistas e músicas: ranking oficial do Spotify, últimas 4 semanas. ' : measured ? 'Artistas e músicas ordenados pelo tempo registrado neste período. ' : 'Base do ranking: últimas 50 reproduções. Não cobre necessariamente a semana inteira. ') + (measured ? 'Registro iniciado em ' + date(data.measured.startedAt) + ' · última atualização ' + relativeTime(data.measured.updatedAt) + '.' : 'A contagem de minutos começa com o monitoramento; datas anteriores precisam do histórico exportado pelo Spotify.');
 }
 $('stats-week').addEventListener('click', () => { statsPeriod = 7; if (listeningStats) renderStats(listeningStats); });
 $('stats-month').addEventListener('click', () => { statsPeriod = 30; if (listeningStats) renderStats(listeningStats); });
@@ -577,8 +586,57 @@ async function pollStats() {
   clearTimeout(statsTimer); if (document.hidden) return;
   try { renderStats(await getJson('/api/estatisticas')); }
   catch { $('stats-context').textContent = 'Os números estão indisponíveis agora. O som continua.'; }
-  finally { statsTimer = setTimeout(pollStats, 300000); }
+  finally { statsTimer = setTimeout(pollStats, 60000); }
 }
+function renderPresence(items) {
+  presenceItems = items || [];
+  const wall = $('presence-wall'); wall.replaceChildren();
+  for (const person of presenceItems) {
+    const link = externalLink(person.url, ''); link.className = 'presence-person';
+    const avatar = el('span', 'presence-avatar', (person.name || '?').slice(0, 1).toUpperCase());
+    if (safeUrl(person.image, true)) { const image = el('img'); image.src = person.image; image.alt = ''; image.width = image.height = 40; image.loading = 'lazy'; avatar.replaceChildren(image); }
+    const copy = el('span', 'presence-person-copy'); copy.append(el('strong', '', person.name), el('small', '', relativeTime(person.presentAt)));
+    link.append(avatar, copy, icon('arrow')); wall.append(link);
+  }
+  if (!presenceItems.length) wall.append(el('p', 'presence-empty', 'O mural tá aberto. O próximo nome pode ser o teu.'));
+  const mine = presenceItems.some(item => item.id === presenceSession?.profile?.id);
+  $('presence-remove').hidden = !mine;
+  $('presence-mark').textContent = mine ? 'Minha presença tá marcada' : 'Marcar minha presença';
+}
+async function pollPresence() {
+  if (document.hidden) return;
+  const jobs = await Promise.allSettled([getJson('/api/presenca?acao=lista'), getJson('/api/presenca?acao=eu')]);
+  if (jobs[1].status === 'fulfilled') {
+    presenceSession = jobs[1].value;
+    const signedIn = Boolean(presenceSession.profile);
+    $('presence-login').hidden = signedIn || !presenceSession.enabled;
+    $('presence-session').hidden = !signedIn;
+    if (signedIn) $('presence-greeting').textContent = 'Salve, ' + presenceSession.profile.name + '. Teu nome só vai pro mural quando tu marcar.';
+  }
+  if (jobs[0].status === 'fulfilled') {
+    renderPresence(jobs[0].value.items);
+    if (jobs[0].value.availability !== 'ready') $('presence-feedback').textContent = 'O mural está reconectando. Tenta de novo daqui a pouco.';
+  }
+  const code = new URLSearchParams(location.search || '').get('presenca');
+  if (code) $('presence-feedback').textContent = code === 'conta-nao-liberada' ? 'O Spotify ainda não liberou tua conta pra este site. Me chama no @oggdann.' : 'A conexão com o Spotify não terminou. Tu pode tentar entrar de novo.';
+}
+async function presenceAction(action) {
+  if (presenceBusy || !presenceSession?.csrf) return;
+  presenceBusy = true;
+  $('presence-mark').disabled = $('presence-remove').disabled = $('presence-logout').disabled = true;
+  try {
+    const response = await fetch('/api/presenca?acao=' + action, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:presenceSession.csrf}),signal:AbortSignal.timeout(12000)});
+    if (!response.ok) throw Error('unavailable');
+    const data = await response.json();
+    if (data.items) renderPresence(data.items);
+    if (action === 'sair') { presenceSession = null; await pollPresence(); }
+    $('presence-feedback').textContent = action === 'marcar' ? 'Presença marcada. Tu tá no mural do OGG.' : action === 'remover' ? 'Teu perfil saiu do mural.' : 'Tu saiu da conta. A presença pode ser removida antes de sair.';
+  } catch { $('presence-feedback').textContent = 'Não consegui confirmar agora. Entra de novo e tenta mais uma vez.'; }
+  finally { presenceBusy = false; $('presence-mark').disabled = $('presence-remove').disabled = $('presence-logout').disabled = false; }
+}
+$('presence-mark').addEventListener('click', () => presenceAction('marcar'));
+$('presence-remove').addEventListener('click', () => presenceAction('remover'));
+$('presence-logout').addEventListener('click', () => presenceAction('sair'));
 async function pollLibrary() {
   clearTimeout(libraryTimer); if (document.hidden) return;
   try { renderLibrary(await getJson('/api/biblioteca')); }
@@ -590,7 +648,7 @@ document.addEventListener('visibilitychange', () => {
     clearTimeout(pollTimer); clearTimeout(libraryTimer); clearTimeout(statsTimer);
     if (state.provider === 'youtube') { state.pendingPlay = state.wantsAudio; state.audible = false; state.controller?.pause(); updateButton(); }
   }
-  else { pollNow(); pollLibrary(); pollStats(); if (state.provider === 'youtube' && state.wantsAudio) attemptPlay(); }
+  else { pollNow(); pollLibrary(); pollStats(); pollPresence(); if (state.provider === 'youtube' && state.wantsAudio) attemptPlay(); }
 });
 setInterval(() => {
   if (document.hidden) return;
@@ -642,11 +700,11 @@ if ('IntersectionObserver' in window) {
   const observer = new IntersectionObserver(entries => {
     for (const entry of entries) if (entry.isIntersecting) for (const link of document.querySelectorAll('.nav-link')) link.classList.toggle('active', link.hash === `#${entry.target.id}`);
   }, { rootMargin: '-15% 0px -65% 0px' });
-  for (const id of ['agora', 'playlists', 'recentes']) observer.observe($(id));
+  for (const id of ['agora', 'playlists', 'numeros', 'presenca']) observer.observe($(id));
 }
 // Warm YouTube while the current song loads. Spotify loads only when selected
 // or when there is no matching YouTube version, so two players never start.
-ensureYouTube(); pollNow(); pollLibrary(); pollStats();
+ensureYouTube(); pollNow(); pollLibrary(); pollStats(); pollPresence();
 
 if ('IntersectionObserver' in window) {
   const videoVisibility = new IntersectionObserver(entries => {

@@ -1,9 +1,11 @@
+import { presenceCallback } from '../lib/presence.js';
 import { randomBytes, createCipheriv, publicEncrypt, constants } from 'node:crypto';
 import { available, equals, OWNER_ID, page, privateHeaders, REDIRECT_URI, sign } from '../lib/owner-auth.js';
 export default async function handler(req, res) {
   privateHeaders(res);
   if (req.method !== 'GET') { res.setHeader('Allow','GET'); return res.status(405).end(); }
   const url = new URL(req.url,'https://oggspotify.vercel.app'), state = url.searchParams.get('state') || '';
+  if (state.startsWith('presence.')) return presenceCallback(req, res);
   const cookie = String(req.headers.cookie || '').split(';').map(v=>v.trim()).find(v=>v.startsWith('__Host-ogg-spotify-state='))?.slice('__Host-ogg-spotify-state='.length);
   const parts = state.split('.'), nonce = parts.slice(0,2).join('.'), age = Date.now() - Number(parts[0]);
   if (!available() || parts.length !== 3 || !equals(state,cookie) || !equals(parts[2],sign(nonce)) || !Number.isFinite(age) || age < 0 || age > 900000) return page(res,400,'Link inválido ou expirado.','Reabra o link de conexão enviado na conversa.');
