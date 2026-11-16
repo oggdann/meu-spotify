@@ -42,32 +42,72 @@ function relativeTime(iso) {
 function externalLink(url, label) {
   const a = el('a', '', label); a.href = safeUrl(url) || 'https://open.spotify.com/'; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a;
 }
+let paletteSource = null;
+const spectrumBars = [];
+function coverPalette(pixels) {
+  const buckets = new Map();
+  for (let i = 0; i < pixels.length; i += 4) {
+    const rgb = [pixels[i], pixels[i + 1], pixels[i + 2]];
+    const max = Math.max(...rgb), min = Math.min(...rgb);
+    if (max < 40 || min > 235 || pixels[i + 3] < 128) continue;
+    const key = rgb.map(value => value >> 5).join(',');
+    const bucket = buckets.get(key) || { count: 0, rgb: [0, 0, 0], saturation: 0 };
+    bucket.count++; rgb.forEach((value, j) => { bucket.rgb[j] += value; });
+    bucket.saturation += (max - min) / Math.max(1, max);
+    buckets.set(key, bucket);
+  }
+  const colors = [...buckets.values()].sort((a, b) => (b.count + b.saturation * 2) - (a.count + a.saturation * 2)).map(bucket => bucket.rgb.map(value => Math.round(value / bucket.count)));
+  const main = colors[0] || [154, 208, 74];
+  const second = colors.find(color => color.reduce((sum, value, i) => sum + Math.abs(value - main[i]), 0) > 110) || [main[2], main[0], main[1]];
+  const tint = rgb => rgb.map(value => Math.round(165 + value / Math.max(1, ...rgb) * 80));
+  return { accent: tint(main), secondary: tint(second), background: main.map(value => Math.round(10 + value * .027)) };
+}
+function setCoverPalette(url) {
+  const source = safeUrl(url, true);
+  if (source === paletteSource) return;
+  paletteSource = source;
+  const apply = palette => {
+    const root = document.documentElement.style;
+    root.setProperty('--accent', 'rgb(' + palette.accent.join(',') + ')');
+    root.setProperty('--accent-rgb', palette.accent.join(','));
+    root.setProperty('--secondary-rgb', palette.secondary.join(','));
+    root.setProperty('--bg', 'rgb(' + palette.background.join(',') + ')');
+  };
+  apply(coverPalette([]));
+  if (!source) return;
+  const sample = new Image(); sample.crossOrigin = 'anonymous';
+  sample.onload = () => {
+    if (source !== paletteSource) return;
+    try {
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 24;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.drawImage(sample, 0, 0, 24, 24);
+      apply(coverPalette(context.getImageData(0, 0, 24, 24).data));
+    } catch { /* Keep the full OGG fallback if the cover cannot be sampled. */ }
+  };
+  sample.src = source;
+}
+function setMusicScene(content) {
+  const seed = Array.from(content.uri || '').reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
+  const root = document.documentElement.style;
+  document.body.setAttribute('data-scene', ['drift', 'orbit', 'pulse'][seed % 3]);
+  root.setProperty('--scene-cycle', (8 + seed % 7) + 's');
+  root.setProperty('--bar-cycle', (.6 + (seed % 6) / 10) + 's');
+  root.setProperty('--scene-angle', (seed % 80 - 40) + 'deg');
+  root.setProperty('--song-position', '0%');
+  spectrumBars.forEach((bar, i) => {
+    bar.style.setProperty('--h', (7 + Math.abs(Math.sin(seed + i * 1.37)) * 22) + 'px');
+    bar.style.setProperty('--delay', (-i * .091 - seed % 4) + 's');
+  });
+  setCoverPalette(content.albumImageUrl || state.now?.albumImageUrl);
+}
 function setArtwork(url) {
   const source = safeUrl(url, true), image = $('album-art');
   image.hidden = !source;
   if (!source) { image.removeAttribute('src'); $('ambient').style.backgroundImage = 'none'; return; }
   image.src = source;
-  $('ambient').style.backgroundImage = `url(${JSON.stringify(source)})`;
-  // Optional cover-derived tint. If CORS or canvas access fails, keep the brand color.
-  const sample = new Image(); sample.crossOrigin = 'anonymous';
-  sample.onload = () => {
-    try {
-      if (source !== safeUrl(state.now?.albumImageUrl, true)) return;
-      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 12;
-      const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(sample, 0, 0, 12, 12);
-      const pixels = context.getImageData(0, 0, 12, 12).data; let r = 0, g = 0, b = 0, count = 0;
-      for (let i = 0; i < pixels.length; i += 4) {
-        if (Math.max(pixels[i], pixels[i+1], pixels[i+2]) < 50) continue;
-        r += pixels[i]; g += pixels[i+1]; b += pixels[i+2]; count++;
-      }
-      if (!count) return;
-      const values = [r, g, b].map(v => Math.round(v / count));
-      const max = Math.max(...values), light = values.map(v => Math.round(v / Math.max(1, max) * 95 + 150));
-      document.documentElement.style.setProperty('--accent', `rgb(${light.join(',')})`);
-      document.documentElement.style.setProperty('--accent-rgb', light.join(','));
-    } catch { /* The original OGG color is a complete fallback. */ }
-  };
-  sample.src = source;
+  $('ambient').style.backgroundImage = 'url(' + JSON.stringify(source) + ')';
+  if (state.follow || !state.selected) setCoverPalette(source);
 }
 $('album-art').addEventListener('error', () => { $('album-art').hidden = true; });
 
@@ -87,6 +127,11 @@ function renderNow(data) {
   $('owner-status').textContent = data.isPlaying ? 'OGG TÁ OUVINDO AGORA' : (data.hasTrack ? 'PAUSA NO SOM DO OGG' : 'ENTRE UM SOM E OUTRO');
   $('track-title').textContent = data.hasTrack ? data.title : 'O próximo som vem aí.';
   $('track-artist').textContent = data.hasTrack ? data.artist : 'Enquanto isso, explora minhas playlists.';
+  const playlistUrl = data.hasTrack && data.playlist?.id && /^[A-Za-z0-9]{22}$/.test(data.playlist.id) ? safeUrl(data.playlist.url) : null;
+  $('owner-playlist').hidden = !playlistUrl;
+  $('owner-playlist-name').textContent = playlistUrl ? data.playlist.name : '';
+  if (playlistUrl) $('owner-playlist-link').href = playlistUrl;
+  else $('owner-playlist-link').removeAttribute('href');
   $('duration-time').textContent = time(data.durationMs);
   $('cover-caption').textContent = data.hasTrack ? data.album || 'OGG / ON REPEAT' : 'FREQUÊNCIA PESSOAL';
   if (data.albumImageUrl !== previous?.albumImageUrl) {
@@ -95,7 +140,7 @@ function renderNow(data) {
   }
   if (state.follow && data.hasTrack) {
     if (data.uri !== previous?.uri || (data.isPlaying && !previous?.isPlaying)) {
-      selectContent({ uri: data.uri, title: data.title, artist: data.artist }, { follow: true, play: state.wantsAudio, automatic: true });
+      selectContent(data, { follow: true, play: state.wantsAudio, automatic: true });
     }
   }
   // Follow song changes, but keep the visitor's own audio controls independent
@@ -140,6 +185,7 @@ function createController() {
     controller.addListener('playback_update', event => {
       if (state.provider !== 'spotify' || state.controller !== controller || state.transitioning || state.unavailable) return;
       const playback = event.data; if (!playback) return;
+      state.positionMs = Number(playback.position) || 0; state.playbackDurationMs = Number(playback.duration) || 0;
       if (state.audible && playback.isPaused && !playback.isBuffering) state.wantsAudio = false;
       state.audible = !playback.isPaused && !playback.isBuffering;
       if (state.audible) { clearTimeout(autoplayTimer); $('player-state').textContent = 'Som ligado'; }
@@ -172,6 +218,7 @@ function showProvider(provider) {
   detachController(); state.provider = provider; state.unavailable = false;
   $('player-unavailable').hidden = true;
   $('spotify-player').hidden = provider !== 'spotify'; $('youtube-player').hidden = provider !== 'youtube';
+  $('spotify-access').hidden = provider !== 'spotify';
   $('player-dock').classList.toggle('youtube-active', provider === 'youtube');
   document.body.classList.toggle('has-youtube', provider === 'youtube');
   $('provider-label').textContent = provider === 'youtube' ? 'YouTube · sem conta do Spotify' : 'Player oficial do Spotify';
@@ -180,6 +227,7 @@ function showProvider(provider) {
 function useSpotify(content, play, note = '') {
   state.transitioning = false; state.unavailable = false; $('player-unavailable').hidden = true;
   if (state.provider !== 'spotify') showProvider('spotify');
+  $('spotify-access').hidden = false;
   state.controller = state.spotifyController; state.ready = state.spotifyReady; state.loadedUri = content.uri;
   if (note) $('audio-note').textContent = note;
   if (state.controller) {
@@ -209,6 +257,7 @@ function unavailableYouTube(message) {
   state.unavailable = true; state.pendingPlay = false;
   $('youtube-player').hidden = true; $('spotify-player').hidden = true;
   $('player-unavailable').hidden = false; $('player-unavailable-note').textContent = message;
+  $('spotify-access').hidden = false;
   $('provider-label').textContent = 'YouTube · indisponível para esta faixa';
   $('player-state').textContent = 'Escolha outro player'; $('audio-note').textContent = message;
   $('player-disclaimer').textContent = 'O Spotify continua disponível como outra opção de reprodução.';
@@ -283,11 +332,15 @@ function startYouTube() {
 async function findVideo(content) {
   const id = /^spotify:track:([A-Za-z0-9]{22})$/.exec(content.uri)?.[1];
   if (!id) return null;
-  if (!videoMatches.has(id)) {
-    const task = getJson(`/api/video?track=${encodeURIComponent(id)}`).catch(() => ({ videoId: null, reason: 'unavailable' }));
-    videoMatches.set(id, task);
+  if (!videoMatches.has(id) || videoMatches.get(id).expires <= Date.now()) {
+    const entry = { expires: Infinity };
+    entry.task = getJson('/api/video?track=' + encodeURIComponent(id), 25000).catch(() => ({ videoId: null, reason: 'unavailable' })).then(result => {
+      entry.expires = Date.now() + (result.videoId ? 86400000 : 60000);
+      return result;
+    });
+    videoMatches.set(id, entry);
   }
-  return videoMatches.get(id);
+  return videoMatches.get(id).task;
 }
 async function selectContent(content, { follow = false, play = true, automatic = false } = {}) {
   if (!/^spotify:(track|episode|playlist):[A-Za-z0-9]{22}$/.test(content?.uri || '')) return;
@@ -295,6 +348,11 @@ async function selectContent(content, { follow = false, play = true, automatic =
   detachController(); state.transitioning = true; state.unavailable = false;
   $('player-unavailable').hidden = true;
   state.selected = content; state.follow = follow; $('follow').checked = follow;
+  state.positionMs = 0; state.playbackDurationMs = content.durationMs || 0;
+  setMusicScene(content);
+  const entity = content.uri.split(':');
+  $('spotify-login-link').href = 'https://accounts.spotify.com/login?continue=' + encodeURIComponent('https://open.spotify.com/' + entity[1] + '/' + entity[2]);
+  $('spotify-access').hidden = true;
   if (!automatic) state.wantsAudio = play;
   state.pendingPlay = play;
   const requestId = ++selectionId;
@@ -302,6 +360,7 @@ async function selectContent(content, { follow = false, play = true, automatic =
   $('player-context').textContent = follow ? 'OUVINDO COM OGG' : 'NA MINHA COLEÇÃO';
   $('selected-track').textContent = `NO PLAYER: ${content.title || 'Playlist'}${content.artist ? ` · ${content.artist}` : ''}`;
   $('player-state').textContent = 'Preparando som…'; $('provider-label').textContent = 'Conferindo a faixa…';
+  $('audio-note').textContent = 'Buscando esta faixa para ouvir junto…';
   updateButton();
   let match = null;
   if (state.preferred !== 'spotify' && content.uri.startsWith('spotify:track:')) match = await findVideo(content);
@@ -328,11 +387,11 @@ $('listen').addEventListener('click', () => {
     state.wantsAudio = false; state.pendingPlay = false; clearTimeout(autoplayTimer); state.controller?.pause(); state.audible = false;
     $('audio-note').textContent = 'Som pausado por aqui. O Spotify do OGG continua normalmente.'; updateButton(); return;
   }
-  if (state.now?.hasTrack) { state.wantsAudio = true; selectContent({ uri: state.now.uri, title: state.now.title, artist: state.now.artist }, { follow: true }); }
+  if (state.now?.hasTrack) { state.wantsAudio = true; selectContent(state.now, { follow: true }); }
 });
 $('follow').addEventListener('change', event => {
   state.follow = event.target.checked;
-  if (state.follow && state.now?.hasTrack) selectContent({ uri: state.now.uri, title: state.now.title, artist: state.now.artist }, { follow: true, play: state.wantsAudio });
+  if (state.follow && state.now?.hasTrack) selectContent(state.now, { follow: true, play: state.wantsAudio });
   else $('player-context').textContent = 'EXPLORANDO MEU SOM';
   updateButton();
 });
@@ -343,6 +402,19 @@ $('player-source').addEventListener('change', event => {
 $('use-spotify').addEventListener('click', () => {
   state.preferred = 'spotify'; $('player-source').value = 'spotify';
   if (state.selected) selectContent(state.selected, { follow: state.follow, play: true });
+});
+$('spotify-retry').addEventListener('click', () => {
+  if (!state.selected) return;
+  // A fresh Embed can recognize the visitor's new Spotify browser session.
+  // Owner authorization and the visitor's login are independent.
+  detachController();
+  const previous = state.spotifyController;
+  state.spotifyController = null; state.spotifyReady = false; state.spotifyUri = null; spotifyCreating = false;
+  previous?.destroy?.();
+  const container = el('div'); container.id = 'spotify-embed';
+  $('spotify-player').replaceChildren(container);
+  state.preferred = 'spotify'; $('player-source').value = 'spotify';
+  selectContent(state.selected, { follow: state.follow, play: true });
 });
 // Real user interaction can unlock audio in browsers that refused autoplay.
 // Never synthesize gestures or restart audio after the visitor paused it.
@@ -408,15 +480,15 @@ function renderLibrary(data) {
   if (safeUrl(data.profile.image, true)) $('profile-image').src = data.profile.image;
   $('profile-image').alt = `Perfil de ${data.profile.name}`;
   $('playlist-count').textContent = data.availability?.playlists === 'ready' ? String(data.playlists.length) : '—';
-  $('playlists-note').textContent = data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Playlists públicas criadas por mim. Cada uma, um pedacinho da minha vibe.';
+  $('playlists-note').textContent = data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Minhas playlists públicas. Sem pose, do meu jeito.';
   renderPlaylists(); renderRecent();
 }
 $('playlist-search').addEventListener('input', () => { state.playlistLimit = 8; renderPlaylists(); });
 $('more-playlists').addEventListener('click', () => { state.playlistLimit += 8; renderPlaylists(); });
 $('more-recent').addEventListener('click', () => { state.recentLimit += 10; renderRecent(); });
 
-async function getJson(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+async function getJson(url, timeout = 12000) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
   if (!response.ok) {
     const error = new Error('unavailable'); error.retryAfter = Math.min(300, Number(response.headers.get('Retry-After')) || 0); throw error;
   }
@@ -446,10 +518,20 @@ document.addEventListener('visibilitychange', () => {
   }
   else { pollNow(); pollLibrary(); }
 });
-setInterval(() => { if (!document.hidden) updateProgress(); }, 1000);
+setInterval(() => {
+  if (document.hidden) return;
+  updateProgress();
+  let position = state.positionMs || 0, duration = state.playbackDurationMs || 0;
+  if (state.provider === 'youtube' && state.ready && state.controller === youtubeAdapter) {
+    position = (youtubePlayer?.getCurrentTime?.() || 0) * 1000;
+    duration = (youtubePlayer?.getDuration?.() || 0) * 1000;
+  }
+  const percent = duration ? Math.min(100, Math.max(0, position / duration * 100)) : 0;
+  document.documentElement.style.setProperty('--song-position', percent + '%');
+}, 1000);
 $('share').addEventListener('click', async () => {
   try {
-    if (navigator.share) await navigator.share({ title: 'OGG • Minha frequência', text: 'Entra na minha frequência. Ouve comigo.', url: 'https://oggspotify.vercel.app/' });
+    if (navigator.share) await navigator.share({ title: 'OGG • Meu som. Sem filtro.', text: 'Do grave à brisa. Cola no som do @oggdann.', url: 'https://oggspotify.vercel.app/' });
     else { await navigator.clipboard.writeText('https://oggspotify.vercel.app/'); toast('Link copiado. Espalha a frequência.'); }
   } catch (error) { if (error.name !== 'AbortError') toast('Compartilha: oggspotify.vercel.app'); }
 });
@@ -459,9 +541,13 @@ function toggleImmersive(force) {
   if (enabled) window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
 }
 $('immersive').addEventListener('click', () => toggleImmersive());
+$('cover-card').addEventListener('click', () => toggleImmersive());
+$('cover-card').addEventListener('keydown', event => {
+  if (['Enter', ' '].includes(event.key)) { event.preventDefault(); toggleImmersive(); }
+});
 document.addEventListener('keydown', event => { if (event.key === 'Escape') toggleImmersive(false); });
 for (let i = 0; i < 48; i++) {
-  const bar = document.createElement('i'); bar.style.setProperty('--h', `${7 + Math.abs(Math.sin(i * 1.37)) * 19}px`); bar.style.setProperty('--delay', `${-i * .091}s`); $('spectrum').append(bar);
+  const bar = document.createElement('i'); bar.style.setProperty('--h', `${7 + Math.abs(Math.sin(i * 1.37)) * 19}px`); bar.style.setProperty('--delay', `${-i * .091}s`); $('spectrum').append(bar); spectrumBars.push(bar);
 }
 if (!reducedMotion && matchMedia('(pointer: fine)').matches) {
   $('art-stage').addEventListener('pointermove', event => {

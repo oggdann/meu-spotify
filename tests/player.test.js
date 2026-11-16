@@ -8,7 +8,7 @@ function playerHarness(fetch) {
   const node=id=>{
     if(nodes.has(id))return nodes.get(id);
     const classes=new Set(), listeners=new Map();
-    const n={id,hidden:false,style:{setProperty(){}},listeners,classList:{add(...c){c.forEach(x=>classes.add(x))},remove(...c){c.forEach(x=>classes.delete(x))},contains(c){return classes.has(c)},toggle(c,value){const enabled=value??!classes.has(c);enabled?classes.add(c):classes.delete(c);return enabled}},setAttribute(){},append(){},addEventListener(name,fn){listeners.set(name,fn)}};
+    const n={id,hidden:false,style:{setProperty(){}},listeners,classList:{add(...c){c.forEach(x=>classes.add(x))},remove(...c){c.forEach(x=>classes.delete(x))},contains(c){return classes.has(c)},toggle(c,value){const enabled=value??!classes.has(c);enabled?classes.add(c):classes.delete(c);return enabled}},setAttribute(){},removeAttribute(name){delete this[name]},append(){},replaceChildren(...children){this.children=children},addEventListener(name,fn){listeners.set(name,fn)}};
     nodes.set(id,n);return n;
   };
   const context=vm.createContext({fetch,AbortSignal,URL,URLSearchParams,console,Response,Element:class {},location:{origin:'https://oggspotify.vercel.app'},navigator:{},window:{scrollTo(){}},matchMedia:()=>({matches:true}),setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId},clearTimeout(id){timers.delete(id)},setInterval(){},document:{hidden:true,body:node('body'),documentElement:node('html'),getElementById:node,createElement:()=>node(Symbol()),createElementNS:()=>node(Symbol()),addEventListener(name,fn){events.set(name,fn)}}});
@@ -29,7 +29,7 @@ const first='1111111111111111111111',second='2222222222222222222222';
 const result=id=>new Response(JSON.stringify({videoId:id}));
 function attachSpotify(h, {delayReady=false}={}) {
   const listeners=new Map();
-  const player={plays:0,pauses:0,created:0,addListener(name,fn){listeners.set(name,fn)},play(){this.plays++;listeners.get('playback_started')?.()},pause(){this.pauses++;listeners.get('playback_update')?.({data:{isPaused:true,isBuffering:false}})},loadEntity(){},emit(name,data){listeners.get(name)?.(data)}};
+  const player={plays:0,pauses:0,created:0,destroys:0,destroy(){this.destroys++},addListener(name,fn){listeners.set(name,fn)},play(){this.plays++;listeners.get('playback_started')?.()},pause(){this.pauses++;listeners.get('playback_update')?.({data:{isPaused:true,isBuffering:false}})},loadEntity(){},emit(name,data){listeners.get(name)?.(data)}};
   h.context.spotifyApi={createController(_element,_options,callback){player.created++;callback(player);if(!delayReady)player.emit('ready')}};
   h.run('onSpotifyIframeApiReady(spotifyApi)');
   return player;
@@ -134,4 +134,58 @@ test('a matched song after an unavailable YouTube selection restores the visible
   await h.run(`selectContent(${content(second)})`);
   assert.equal(h.node('player-unavailable').hidden,true);assert.equal(h.node('youtube-player').hidden,false);
   h.videoPlayers[0].options.events.onReady();assert.equal(h.run('state.audible'),true);
+});
+test('initial listening attempts autoplay with both YouTube and Spotify',async()=>{
+  const youtube=playerHarness(()=>Promise.resolve(result('aaaaaaaaaaa')));
+  await youtube.run('selectContent('+content(first)+',{follow:true,automatic:true})');
+  const video=youtube.videoPlayers[0];assert.equal(video.options.playerVars.autoplay,1);
+  video.options.events.onReady();assert.ok(video.plays>0);assert.equal(youtube.run('state.audible'),true);
+  const spotify=playerHarness(()=>Promise.resolve(result(null)));const player=attachSpotify(spotify);
+  await spotify.run("state.preferred='spotify';selectContent("+content(first)+",{follow:true,automatic:true})");
+  assert.equal(player.plays,1);assert.equal(spotify.run('state.audible'),true);
+});
+test('a negative browser match expires and can find a newly available video',async()=>{
+  let calls=0;
+  const h=playerHarness(()=>Promise.resolve(result(++calls===1?null:'aaaaaaaaaaa')));
+  h.run('let clock=1000;Date.now=()=>clock');
+  await h.run('findVideo('+content(first)+')');await h.run('findVideo('+content(first)+')');assert.equal(calls,1);
+  h.run('clock+=60001');const found=await h.run('findVideo('+content(first)+')');
+  assert.equal(found.videoId,'aaaaaaaaaaa');assert.equal(calls,2);
+});
+test('the visitor login stays on Spotify and follows the selected song',async()=>{
+  const h=playerHarness(()=>Promise.resolve(result('aaaaaaaaaaa')));attachSpotify(h);
+  await h.run("state.preferred='spotify';selectContent("+content(first)+")");
+  assert.equal(h.node('spotify-access').hidden,false);
+  let url=new URL(h.node('spotify-login-link').href);
+  assert.equal(url.origin,'https://accounts.spotify.com');
+  assert.equal(url.searchParams.get('continue'),'https://open.spotify.com/track/'+first);
+  await h.run("state.preferred='youtube';selectContent("+content(second)+")");
+  assert.equal(h.node('spotify-access').hidden,true);
+  url=new URL(h.node('spotify-login-link').href);
+  assert.equal(url.searchParams.get('continue'),'https://open.spotify.com/track/'+second);
+});
+test('retrying after visitor login recreates the Spotify player and autoplays the same selection',async()=>{
+  const h=playerHarness(()=>Promise.resolve(result(null)));const player=attachSpotify(h);
+  await h.run("state.preferred='spotify';selectContent("+content(first)+",{follow:true})");
+  h.node('spotify-retry').listeners.get('click')();
+  assert.equal(player.destroys,1);assert.equal(player.created,2);assert.equal(player.plays,2);
+  assert.equal(h.run('state.selected.uri'),'spotify:track:'+first);assert.equal(h.run('state.follow'),true);
+});
+test('cover colors remain readable and genuinely differ for different cover pixels',()=>{
+  const h=playerHarness(()=>Promise.resolve(result(null)));
+  const red=h.run('coverPalette([230,20,20,255,200,15,15,255])');
+  const blue=h.run('coverPalette([20,20,230,255,15,15,200,255])');
+  assert.ok(red.accent[0]>red.accent[2]);assert.ok(blue.accent[2]>blue.accent[0]);
+  assert.ok([...red.accent,...blue.accent].every(value=>value>=165&&value<=245));
+  assert.ok(red.background.every(value=>value<=17));
+});
+test('playlist origin is linked when present and removed when playback leaves the playlist',async()=>{
+  const h=playerHarness(()=>Promise.resolve(result(null)));attachSpotify(h);
+  const data={hasTrack:true,isPlaying:true,uri:'spotify:track:'+first,title:'Owner song',artist:'Artist',durationMs:180000,checkedAt:Date.now(),playlist:{id:second,name:'OGG public list',url:'https://open.spotify.com/playlist/'+second}};
+  h.context.playback=data;h.run('renderNow(playback)');
+  assert.equal(h.node('owner-playlist').hidden,false);
+  assert.equal(h.node('owner-playlist-name').textContent,'OGG public list');
+  assert.equal(h.node('owner-playlist-link').href,data.playlist.url);
+  h.context.playback={...data,playlist:null};h.run('renderNow(playback)');
+  assert.equal(h.node('owner-playlist').hidden,true);assert.equal(h.node('owner-playlist-name').textContent,'');
 });

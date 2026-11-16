@@ -57,3 +57,16 @@ test('playlist descriptions decode display entities without keeping markup', () 
   const r = scenario(`const {plainDescription}=await import('./lib/spotify.js');console.log(JSON.stringify({value:plainDescription('since&gt;11&#x2F;05&#x2F;2026 &amp; som &lt;script&gt;ignored&lt;/script&gt;')}));`);
   assert.equal(r.value, 'since>11/05/2026 & som ignored');
 });
+test('current playback publishes a verified public playlist without raw context or private metadata',()=>{
+  const r=scenario("const id='2222222222222222222222';globalThis.fetch=async(url)=>{calls.push(url);if(url.includes('/api/token'))return json({access_token:'access',expires_in:3600});if(url.includes('/playlists/'))return json({id,name:'OGG public list',public:true,owner:{email:'private@example.com'},description:'not needed'});return json({is_playing:true,item:track,context:{type:'playlist',uri:'spotify:playlist:'+id,href:'private-context-data'}})};const {default:h}=await import('./api/musica.js');const a=response(),b=response();await Promise.all([h({method:'GET'},a),h({method:'GET'},b)]);console.log(JSON.stringify({a,count:calls.length}));");
+  assert.equal(r.a.body.playlist.name,'OGG public list');assert.equal(r.a.body.playlist.url,'https://open.spotify.com/playlist/2222222222222222222222');
+  assert.equal(r.count,3);assert.doesNotMatch(JSON.stringify(r.a.body),/private@example|private-context|not needed|access_token/);
+});
+test('private playlist names and identifiers never appear in public playback responses',()=>{
+  const r=scenario("const id='9999999999999999999999';globalThis.fetch=async(url)=>url.includes('/api/token')?json({access_token:'access',expires_in:3600}):url.includes('/playlists/')?json({id,name:'PRIVATE PLAYLIST',public:false}):json({is_playing:true,item:track,context:{type:'playlist',uri:'spotify:playlist:'+id}});const {default:h}=await import('./api/musica.js');const r=response();await h({method:'GET'},r);console.log(JSON.stringify(r));");
+  assert.equal(r.body.playlist,null);assert.equal(r.body.isPlaying,true);assert.doesNotMatch(JSON.stringify(r.body),/PRIVATE|9999999999999999999999/);
+});
+test('a failed playlist lookup leaves the current song working',()=>{
+  const r=scenario("globalThis.fetch=async(url)=>url.includes('/api/token')?json({access_token:'access',expires_in:3600}):url.includes('/playlists/')?json({error:'unavailable'},503):json({is_playing:true,item:track,context:{type:'playlist',uri:'spotify:playlist:2222222222222222222222'}});const {default:h}=await import('./api/musica.js');const r=response();await h({method:'GET'},r);console.log(JSON.stringify(r));");
+  assert.equal(r.code,200);assert.equal(r.body.playlist,null);assert.equal(r.body.title,'Test song');
+});
