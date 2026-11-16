@@ -15,7 +15,8 @@ export default async function handler(req, res) {
       return { profile, playlists: playlists.status === 'fulfilled' ? playlists.value.items : [],
         recent: recent.status === 'fulfilled' ? (recent.value?.items || []).map(row => ({ ...publicTrack(row.track), playedAt: row.played_at })).filter(row => row.id) : [],
         availability: { playlists: playlists.status === 'fulfilled' ? (playlists.value.stale ? 'stale' : 'ready') : playlists.reason?.code || 'temporarily_unavailable', recent: recent.status === 'fulfilled' ? (cacheInfo(recent.value).stale ? 'stale' : 'ready') : recent.reason?.code || 'temporarily_unavailable' },
-        retryAfter: Math.max(playlists.reason?.retryAfter || playlists.value?.retryAfter || 0, recent.reason?.retryAfter || cacheInfo(recent.value).retryAfter || 0),
+        // Recent-history cooldown must not stop automatic playlist cover refresh.
+        retryAfter: playlists.reason?.retryAfter || playlists.value?.retryAfter || 0,
         playlistsTruncated: playlists.status === 'fulfilled' && playlists.value.truncated, checkedAt: Date.now() };
     });
     res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
