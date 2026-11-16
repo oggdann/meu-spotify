@@ -29,6 +29,7 @@ test('durable checkpoint recovers after cache eviction and rejects older uploads
   const value=validateListeningSnapshot(snapshot(),now);await store.saveMeasured(value);assert.equal(writes,1);
   assert.equal(await store.saveMeasured({...value,updatedAt:now-1000}),false);
   memory.clear();assert.deepEqual(await store.measured(),value);
+  memory.clear();assert.equal(await store.saveMeasured({...value,updatedAt:now-1000}),false);
   await store.saveMeasured({...value,updatedAt:now+1000});assert.equal(writes,2); // Eviction permits another safe checkpoint.
 });
 test('presence store deduplicates users, throttles repeated marks and limits the public wall to 30 days',async()=>{

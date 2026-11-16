@@ -4,15 +4,22 @@ import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 
 function playerHarness(fetch, {observeVideo=false}={}) {
-  const nodes=new Map(), events=new Map(), videoPlayers=[], timers=new Map(), observers=[];let timerId=0;
+  const nodes=new Map(), events=new Map(), videoPlayers=[], timers=new Map(), observers=[], windowEvents=new Map();let timerId=0;
   const node=id=>{
     if(nodes.has(id))return nodes.get(id);
     const classes=new Set(), listeners=new Map();
     const n={id,hidden:false,style:{setProperty(){}},listeners,classList:{add(...c){c.forEach(x=>classes.add(x))},remove(...c){c.forEach(x=>classes.delete(x))},contains(c){return classes.has(c)},toggle(c,value){const enabled=value??!classes.has(c);enabled?classes.add(c):classes.delete(c);return enabled}},setAttribute(){},removeAttribute(name){delete this[name]},append(...children){(this.children??=[]).push(...children)},prepend(...children){this.children=[...children,...(this.children||[])]},replaceChildren(...children){this.children=children},addEventListener(name,fn){listeners.set(name,fn)}};
+    n.getBoundingClientRect=()=>n.rect||{top:0,left:0,right:320,bottom:320,width:320,height:320};
     nodes.set(id,n);return n;
   };
   const context=vm.createContext({fetch,AbortSignal,URL,URLSearchParams,console,Response,Element:class {},location:{origin:'https://oggspotify.vercel.app'},navigator:{},window:{scrollTo(){}},matchMedia:()=>({matches:true}),setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId},clearTimeout(id){timers.delete(id)},setInterval(){},document:{hidden:true,body:node('body'),documentElement:node('html'),getElementById:node,createElement:()=>node(Symbol()),createElementNS:()=>node(Symbol()),addEventListener(name,fn){events.set(name,fn)},querySelectorAll(){return []}}});
   context.window=context;
+  context.innerWidth=390;context.innerHeight=844;
+  context.addEventListener=(name,fn)=>windowEvents.set(name,fn);
+  context.requestAnimationFrame=fn=>{fn();return 1};
+  node('html').clientWidth=390;
+  node('player-dock').rect={top:774,left:14,right:376,bottom:834,width:362,height:60};
+  if(observeVideo)node('cover-image').rect={top:1000,left:20,right:340,bottom:1320,width:320,height:320};
   if(observeVideo)context.IntersectionObserver=class{constructor(callback){this.callback=callback;observers.push(this)}observe(target){this.target=target}unobserve(){}};
   context.YT={Player:class{
     constructor(id,options){this.options=options;this.plays=0;this.pauses=0;this.loaded=[];videoPlayers.push(this)}
@@ -23,7 +30,7 @@ function playerHarness(fetch, {observeVideo=false}={}) {
   }};
   vm.runInContext(readFileSync('public/app.js','utf8'),context);
   vm.runInContext('onYouTubeIframeAPIReady()',context);
-  return {context,node,events,videoPlayers,timers,observers,run:code=>vm.runInContext(code,context)};
+  return {context,node,events,windowEvents,videoPlayers,timers,observers,run:code=>vm.runInContext(code,context)};
 }
 const content=id=>JSON.stringify({uri:`spotify:track:${id}`,title:'Song'});
 const first='1111111111111111111111',second='2222222222222222222222';
@@ -204,19 +211,36 @@ test('initial autoplay keeps the player compact in both providers',async()=>{
     assert.equal(h.node('body').classList.contains('player-collapsed'),true);
   }
 });
-test('YouTube waits for a visible video, resumes on return, and preserves deliberate pause',async()=>{
+test('initial autoplay waits for the cover and does not cover the mobile entrance with a floating player',async()=>{
   const h=playerHarness(()=>Promise.resolve(result('aaaaaaaaaaa')),{observeVideo:true});
-  await h.run('selectContent('+content(first)+',{follow:true,automatic:true})');
+  await h.run(`selectContent(${content(first)},{automatic:true})`);
   const player=h.videoPlayers[0];player.options.events.onReady();
   assert.equal(player.plays,0);
-  const observer=h.observers.find(item=>item.target?.id==='inline-video-slot');
-  assert.ok(observer);
-  observer.callback([{isIntersecting:true,intersectionRatio:.8}]);assert.equal(player.plays,1);
-  observer.callback([{isIntersecting:false,intersectionRatio:0}]);assert.equal(h.run('state.audible'),false);assert.equal(h.run('state.wantsAudio'),true);
-  observer.callback([{isIntersecting:true,intersectionRatio:.8}]);assert.equal(player.plays,2);
-  h.node('dock-play').listeners.get('click')();
-  observer.callback([{isIntersecting:false,intersectionRatio:0}]);observer.callback([{isIntersecting:true,intersectionRatio:.8}]);
-  assert.equal(h.run('state.wantsAudio'),false);assert.equal(player.plays,2);
+  assert.equal(h.node('inline-video-slot').classList.contains('is-floating'),false);
+  h.node('cover-image').rect={top:100,left:20,right:340,bottom:420,width:320,height:320};h.run('document.hidden=false;placeYouTube()');
+  assert.equal(player.plays,1);
+});
+test('scrolling on mobile or desktop floats the same YouTube iframe without pausing or restarting it',async()=>{
+  for(const width of [390,1360]){
+    const h=playerHarness(()=>Promise.resolve(result('aaaaaaaaaaa')));
+    h.node('html').clientWidth=width;
+    await h.run(`selectContent(${content(first)})`);const player=h.videoPlayers[0];player.options.events.onReady();
+    const plays=player.plays,pauses=player.pauses,loaded=player.loaded.length;
+    h.node('cover-image').rect={top:-500,left:20,right:340,bottom:-180,width:320,height:320};h.windowEvents.get('scroll')();
+    assert.equal(h.node('inline-video-slot').classList.contains('is-floating'),true);
+    assert.equal(h.run('state.audible'),true);assert.equal(player.pauses,pauses);assert.equal(player.plays,plays);assert.equal(player.loaded.length,loaded);
+    h.node('cover-image').rect={top:100,left:20,right:340,bottom:420,width:320,height:320};h.windowEvents.get('scroll')();
+    assert.equal(h.node('inline-video-slot').classList.contains('is-floating'),false);assert.equal(h.videoPlayers.length,1);assert.equal(player.pauses,pauses);
+  }
+});
+test('closing the floating video pauses intentionally and unrelated clicks do not restart it',async()=>{
+  const h=playerHarness(()=>Promise.resolve(result('aaaaaaaaaaa')));
+  await h.run(`selectContent(${content(first)})`);const player=h.videoPlayers[0];player.options.events.onReady();
+  h.node('cover-image').rect={top:-500,left:20,right:340,bottom:-180,width:320,height:320};h.windowEvents.get('scroll')();
+  h.node('mini-video-close').listeners.get('click')();const plays=player.plays;
+  h.run("unlockOnInteraction({isTrusted:true,type:'click',target:null})");
+  assert.equal(h.run('state.wantsAudio'),false);assert.equal(h.run('state.audible'),false);assert.equal(h.node('inline-video-slot').classList.contains('is-floating'),false);assert.equal(player.plays,plays);
+  h.node('dock-play').listeners.get('click')();assert.equal(h.node('inline-video-slot').classList.contains('is-floating'),true);assert.equal(h.run('state.audible'),true);
 });
 test('statistics do not show a fake minute total without full listening history',()=>{
   const h=playerHarness(()=>Promise.resolve(result(null)));

@@ -259,7 +259,7 @@ body.has-youtube.player-collapsed{padding-bottom:110px}
   .brand{gap:13px}.brand img{width:96px;height:48px}
   .brand>span{padding-left:13px;font-size:8px;letter-spacing:1px}
   .brand-sub{font-size:10px;letter-spacing:0;margin-top:4px}
-  .hero{padding-block:30px 35px}
+  .hero{padding-block:30px 35px;align-items:stretch}
   .hero-copy>.eyebrow{font-size:8px;letter-spacing:1.5px}
   h1{font-size:clamp(42px,10.5vw,66px);line-height:1.04;letter-spacing:-2.7px}
   .heading-star{font-size:.55em;margin-left:9px}
@@ -328,6 +328,26 @@ body.has-youtube.player-collapsed{padding-bottom:110px}
   .footer>a:first-child img{width:80px}.footer>a:last-child{font-size:11px}
   body.has-player.player-collapsed{padding-bottom:90px}
 }
+.owner-playlist>a:last-child svg{width:12px;height:12px}
+.spotify-profile-callout>svg:last-child{width:12px;height:12px}
+.signature-instagram strong{display:inline-flex;align-items:center;gap:6px;justify-content:flex-end}
+.signature-instagram strong svg{width:14px;height:14px}
+.dock-creator a{display:inline-flex;align-items:center;gap:4px}
+.dock-creator a svg,.spotify-login-btn svg{width:12px;height:12px}
+
+/* One persistent iframe: inline in the cover, floating only after listening. */
+body .cover-card.has-video{animation:none!important;translate:none!important;transform:none!important}
+.inline-video-slot{position:fixed;inset:auto;left:var(--video-left,0px);top:var(--video-top,0px);width:var(--video-width,0px);height:var(--video-height,0px);z-index:24;background:#101110;overflow:hidden}
+.inline-video-slot.is-floating{left:auto;top:auto;right:14px;bottom:var(--floating-bottom,14px);width:284px;height:242px;border:1px solid rgba(var(--accent-rgb),.4);border-radius:12px;box-shadow:0 12px 45px #000a}
+.inline-video-slot.is-floating #youtube-player{height:200px;width:100%}
+.mini-video-toolbar{display:flex;align-items:center;gap:5px;height:40px!important;padding:0 5px 0 11px;background:color-mix(in srgb,var(--bg) 92%,var(--accent) 8%);color:var(--accent)}
+.mini-video-toolbar>span{font:8px var(--display);letter-spacing:1px;flex:1;white-space:nowrap}
+.mini-video-toolbar button{display:grid;place-items:center;min-width:34px;min-height:36px;background:transparent;border-radius:7px;color:var(--text);font-size:23px}
+.mini-video-toolbar button:hover{background:rgba(var(--accent-rgb),.12)}
+.mini-video-toolbar svg{width:17px;height:17px}
+.video-floating .player-dock.collapsed{visibility:hidden;pointer-events:none}
+.video-floating .cover-card.has-video .cover-image>img{visibility:visible}
+@media(max-width:600px){.inline-video-slot.is-floating{width:212px;right:12px}.mini-video-toolbar{padding-left:8px;gap:2px}.mini-video-toolbar>span{font-size:7px;letter-spacing:.5px}}
 @media(max-width:360px){
   .wrap{width:calc(100% - 32px)}.brand>span{display:block;font-size:7px}.brand img{width:82px}
   .brand-sub{font-size:9px}.brand{gap:10px}.brand>span{padding-left:10px}

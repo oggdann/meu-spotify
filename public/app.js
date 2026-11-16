@@ -7,6 +7,46 @@ let pollTimer, libraryTimer, statsTimer, autoplayTimer, videoBufferTimer, toastT
 let selectionId = 0, youtubeLoading = false, youtubeReady = false, youtubePlayer = null, youtubePlayerReady = false, youtubeAdapter = null, youtubeUri = null, youtubeVideo = null, youtubeStarted = false;
 const videoMatches = new Map();
 let youtubeVisible = !('IntersectionObserver' in window);
+let videoHasBeenVisible = false, miniVideoDismissed = false, videoPlacementQueued = false;
+
+// The iframe stays in one DOM location. Resizing/repositioning the same surface
+// avoids the playback reset caused by moving an iframe between containers.
+function placeYouTube() {
+  const slot = $('inline-video-slot');
+  if (state.provider !== 'youtube' || slot.hidden || state.unavailable) {
+    slot.classList.remove('is-floating'); document.body.classList.remove('video-floating');
+    $('mini-video-toolbar').hidden = true; return;
+  }
+  const rect = $('cover-image').getBoundingClientRect();
+  const width = document.documentElement.clientWidth || window.innerWidth;
+  const height = window.visualViewport?.height || window.innerHeight;
+  const visibleWidth = Math.max(0, Math.min(rect.right, width) - Math.max(rect.left, 0));
+  const visibleHeight = Math.max(0, Math.min(rect.bottom, height) - Math.max(rect.top, 0));
+  const coverVisible = rect.width > 0 && rect.height > 0 && visibleWidth * visibleHeight >= rect.width * rect.height * .5;
+  if (coverVisible) videoHasBeenVisible = true;
+  const expanded = !$('player-dock').classList.contains('collapsed');
+  const dock = $('player-dock').getBoundingClientRect();
+  const bottom = expanded ? Math.max(14, height - dock.top + 12) : 14;
+  const floating = !coverVisible && videoHasBeenVisible && !miniVideoDismissed && state.wantsAudio && width >= 228 && height >= bottom + 244;
+  slot.classList.toggle('is-floating', floating); document.body.classList.toggle('video-floating', floating);
+  $('mini-video-toolbar').hidden = !floating;
+  slot.style.setProperty('--video-left', rect.left + 'px'); slot.style.setProperty('--video-top', rect.top + 'px');
+  slot.style.setProperty('--video-width', rect.width + 'px'); slot.style.setProperty('--video-height', rect.height + 'px');
+  slot.style.setProperty('--floating-bottom', bottom + 'px');
+  const wasVisible = youtubeVisible;
+  youtubeVisible = floating || coverVisible;
+  if (wasVisible === youtubeVisible || state.transitioning || state.controller !== youtubeAdapter) return;
+  if (!youtubeVisible) {
+    state.pendingPlay = state.wantsAudio; state.audible = false; state.controller?.pause();
+    $('player-state').textContent = 'Vídeo pausado fora de vista'; updateButton();
+  } else if (state.wantsAudio && !document.hidden) attemptPlay();
+}
+function scheduleYouTubePlacement() {
+  if (videoPlacementQueued) return;
+  videoPlacementQueued = true;
+  const run = () => { videoPlacementQueued = false; placeYouTube(); };
+  if (window.requestAnimationFrame) window.requestAnimationFrame(run); else run();
+}
 
 function icon(name) {
   const svg = document.createElementNS(iconNS, 'svg'), use = document.createElementNS(iconNS, 'use');
@@ -131,6 +171,7 @@ function updateButton() {
   $('dock-play').disabled = !state.selected;
   $('dock-play').setAttribute('aria-label', state.audible ? 'Pausar música' : 'Tentar ouvir música');
   $('dock-play-icon').setAttribute('href', state.audible ? '#i-pause' : '#i-play');
+  scheduleYouTubePlacement();
 }
 function renderNow(data) {
   const previous = state.now;
@@ -245,6 +286,7 @@ function showProvider(provider) {
   document.body.classList.toggle('has-youtube', provider === 'youtube');
   $('provider-label').textContent = provider === 'youtube' ? 'YouTube · sem conta do Spotify' : 'Player oficial do Spotify';
   $('player-disclaimer').textContent = provider === 'youtube' ? 'Reprodução pelo YouTube. A disponibilidade varia por faixa e região; o navegador pode pedir um toque para liberar o som.' : 'Reprodução pelo Spotify. Faixa completa ou prévia conforme a tua sessão.';
+  placeYouTube();
 }
 function useSpotify(content, play, note = '') {
   state.transitioning = false; state.unavailable = false; $('player-unavailable').hidden = true;
@@ -380,6 +422,7 @@ async function selectContent(content, { follow = false, play = true, automatic =
   $('spotify-login-link').href = 'https://accounts.spotify.com/login?continue=' + encodeURIComponent('https://open.spotify.com/' + entity[1] + '/' + entity[2]);
   $('spotify-access').hidden = true;
   if (!automatic) state.wantsAudio = play;
+  if (!automatic) { videoHasBeenVisible = true; miniVideoDismissed = false; }
   state.pendingPlay = play;
   const requestId = ++selectionId;
   $('player-dock').hidden = false; document.body.classList.add('has-player');
@@ -457,6 +500,7 @@ function setDockExpanded(expanded) {
   document.body.classList.toggle('player-collapsed', collapsed);
   $('collapse-player').setAttribute('aria-expanded', String(expanded));
   $('collapse-player').setAttribute('aria-label', expanded ? 'Recolher controles de música' : 'Abrir controles de música');
+  scheduleYouTubePlacement();
 }
 setDockExpanded(false);
 $('collapse-player').addEventListener('click', () => setDockExpanded($('player-dock').classList.contains('collapsed')));
@@ -468,9 +512,15 @@ $('dock-play').addEventListener('click', () => {
     state.controller?.pause(); state.audible = false; $('player-state').textContent = 'Som pausado'; updateButton();
   } else {
     state.wantsAudio = true;
-    if (state.provider === 'youtube' && !youtubeVisible) $('inline-video-slot').scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'center'});
+    if (state.provider === 'youtube') { videoHasBeenVisible = true; miniVideoDismissed = false; placeYouTube(); }
     attemptPlay();
   }
+});
+$('mini-video-options').addEventListener('click', () => setDockExpanded(true));
+$('mini-video-close').addEventListener('click', () => {
+  miniVideoDismissed = true; state.wantsAudio = false; state.pendingPlay = false; state.audible = false;
+  clearTimeout(autoplayTimer); state.controller?.pause(); $('player-state').textContent = 'Som pausado';
+  placeYouTube(); updateButton();
 });
 
 function cover(src, name, className = '') {
@@ -648,7 +698,7 @@ document.addEventListener('visibilitychange', () => {
     clearTimeout(pollTimer); clearTimeout(libraryTimer); clearTimeout(statsTimer);
     if (state.provider === 'youtube') { state.pendingPlay = state.wantsAudio; state.audible = false; state.controller?.pause(); updateButton(); }
   }
-  else { pollNow(); pollLibrary(); pollStats(); pollPresence(); if (state.provider === 'youtube' && state.wantsAudio) attemptPlay(); }
+  else { pollNow(); pollLibrary(); pollStats(); pollPresence(); placeYouTube(); if (state.provider === 'youtube' && state.wantsAudio) attemptPlay(); }
 });
 setInterval(() => {
   if (document.hidden) return;
@@ -706,14 +756,12 @@ if ('IntersectionObserver' in window) {
 // or when there is no matching YouTube version, so two players never start.
 ensureYouTube(); pollNow(); pollLibrary(); pollStats(); pollPresence();
 
-if ('IntersectionObserver' in window) {
-  const videoVisibility = new IntersectionObserver(entries => {
-    youtubeVisible = entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= .5);
-    if (state.provider !== 'youtube' || state.unavailable || state.transitioning) return;
-    if (!youtubeVisible) {
-      state.pendingPlay = state.wantsAudio; state.audible = false; state.controller?.pause();
-      $('player-state').textContent = 'Vídeo pausado fora de vista'; updateButton();
-    } else if (state.wantsAudio) attemptPlay();
-  }, {threshold:[0,.5,1]});
-  videoVisibility.observe($('inline-video-slot'));
+window.addEventListener('scroll', scheduleYouTubePlacement, {passive:true});
+window.addEventListener('resize', scheduleYouTubePlacement, {passive:true});
+window.visualViewport?.addEventListener('resize', scheduleYouTubePlacement, {passive:true});
+window.visualViewport?.addEventListener('scroll', scheduleYouTubePlacement, {passive:true});
+if ('ResizeObserver' in window) {
+  const videoLayout = new ResizeObserver(scheduleYouTubePlacement);
+  videoLayout.observe($('cover-image')); videoLayout.observe($('agora'));
 }
+document.fonts?.ready.then(scheduleYouTubePlacement);
