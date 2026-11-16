@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import music from '../api/musica.js';
 import library from '../api/biblioteca.js';
+import video from '../api/video.js';
 const root = path.resolve('public');
 const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png' };
 http.createServer(async (req, res) => {
@@ -12,6 +13,7 @@ http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/musica') return music(req, res);
     if (url.pathname === '/api/biblioteca') return library(req, res);
+    if (url.pathname === '/api/video') return video(req, res);
     const file = path.resolve(root, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
     if (!file.startsWith(root + path.sep)) { res.statusCode = 403; return res.end(); }
     const data = await readFile(file); res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream'); res.end(data);

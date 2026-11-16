@@ -8,7 +8,11 @@ Node 22 ou superior. Configure as três variáveis de `.env.example` no ambiente
 
 ## Reprodução
 
-O player oficial do Spotify carrega a mesma faixa do proprietário e tenta iniciar ao entrar. Bloqueios de autoplay exigem interação do visitante, especialmente no Safari. O botão “Ativar som” e os controles oficiais permanecem disponíveis. A sessão do visitante, o navegador e a disponibilidade do Spotify determinam reprodução completa ou prévia. Nenhuma credencial do proprietário é entregue ao visitante; a página nunca transfere nem controla a reprodução do proprietário.
+O modo Automático tenta a mesma faixa no player oficial do YouTube, sem exigir conta do Spotify. O vídeo e os controles permanecem visíveis; recolher o vídeo ou trocar de aba pausa o YouTube. O Spotify é alternativa quando não há correspondência ou o vídeo está indisponível. Nunca são iniciados dois players ao mesmo tempo. Bloqueios de autoplay ainda podem exigir interação do visitante. O botão “Ativar som” e os controles oficiais permanecem disponíveis. No Spotify, a sessão do visitante determina reprodução completa ou prévia. Nenhuma credencial do proprietário é entregue ao visitante.
+
+`YOUTUBE_API_KEY`, opcional e somente no servidor, habilita a busca automática de outras faixas. Configure uma chave de projeto Google Cloud com YouTube Data API v3 ativada, restrita a essa API, diretamente nas variáveis Secret da Vercel, em Production e Preview. Não cole chaves no código. Sem ela, apenas as correspondências verificadas em `lib/youtube.js` usam YouTube; as outras faixas continuam no Spotify. A busca compara título, artista e duração e rejeita versões alteradas, covers e vídeos restritos. Não é uma garantia de gravação idêntica. A busca pública é limitada à faixa atual e às 30 recentes do dono, com deduplicação e cache por faixa de até 24 horas. Observe a cota diária da API; não há extração de áudio nem uso de APIs não oficiais.
+
+Referências dos áudios de distribuição oficial verificados: [Hobby + Gestão Inteligente](https://www.youtube.com/watch?v=lQUvn6nFqq0), [Shotta Flow Remix](https://www.youtube.com/watch?v=PX0pgsOA_tA), [Self Esteem](https://www.youtube.com/watch?v=YIEjlOhzcbk), [Клетка](https://www.youtube.com/watch?v=XSsRrlM3tNg) e [Helena Beat](https://www.youtube.com/watch?v=FlBCUzGLce0).
 
 “Acompanhar trocas” segue as mudanças de faixa; não promete sincronização exata de tempo. Escolher uma playlist ou uma faixa recente desativa esse acompanhamento. O visitante pode retomá-lo.
 
