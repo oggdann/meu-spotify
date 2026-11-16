@@ -78,7 +78,7 @@ test('open guest wall validates optional links and comment lengths without requi
   for(const body of [{name:'x'},{name:'Dan',url:'javascript:alert(1)'},{name:'Dan',url:'https://user:pass@example.com'},{name:'Dan',comment:'a'.repeat(281)},{name:'Dan',website:'spam'}])assert.equal(guestProfile(body,'id'),null);
 });
 test('guest can post and remove only their own presence without Spotify calls; CSRF and throttling apply',async()=>{
-  let upstream=0;globalThis.fetch=async()=>{upstream++;throw Error('must not call Spotify')};const writes=[];
+  let upstream=0;globalThis.fetch=async(url)=>{if(/api\.spotify\.com|accounts\.spotify\.com/.test(String(url)))upstream++;throw Error('public metadata unavailable')};const writes=[];
   const h=createPresenceHandler({store:()=>({mark:async(profile,key)=>{writes.push({profile,key});return [profile]},removePresence:async key=>{assert.equal(key,writes[0].key);return []}})});
   const me=response();await h(req('eu'),me);assert.ok(me.body.guest.csrf);
   const cookie=me.headers['Set-Cookie'].split(';')[0],headers={origin:root,cookie,'x-vercel-forwarded-for':'guest-test'};
@@ -95,3 +95,5 @@ test('visitors can share Instagram and a Spotify profile or playlist together wi
   assert.equal(guestProfile({name:'Visitante',spotifyUrl:'https://open.spotify.com/user/ogg'},'id').spotifyUrl,'https://open.spotify.com/user/ogg');
   for(const link of ['https://instagram.com.evil.example/ogg','https://instagram.com/p/post/','https://example.com/user','https://open.spotify.com/track/306AubstP6UatfIUhynAX8'])assert.equal(guestProfile({name:'Visitante',url:link},'id'),null);
 });
+
+test('bare Instagram and Spotify usernames become canonical links',()=>{const p=guestProfile({name:'Dan',instagramUrl:'@oggdann',spotifyUrl:'@ogg'},'id');assert.equal(p.instagramUrl,'https://www.instagram.com/oggdann/');assert.equal(p.spotifyUrl,'https://open.spotify.com/user/ogg');assert.equal(guestProfile({name:'Dan',spotifyUrl:'spotify:playlist:306AubstP6UatfIUhynAX8'},'id').spotifyUrl,'https://open.spotify.com/playlist/306AubstP6UatfIUhynAX8');});

@@ -66,7 +66,7 @@ function safeUrl(value, image = false) {
   try {
     const u = new URL(value);
     if (u.protocol !== 'https:') return null;
-    return image ? ((u.hostname.endsWith('.scdn.co') || u.hostname.endsWith('.spotifycdn.com') || u.hostname === 'platform-lookaside.fbsbx.com') ? u.href : null) : (u.hostname === 'open.spotify.com' ? u.href : null);
+    return image ? ((u.hostname.endsWith('.scdn.co') || u.hostname.endsWith('.spotifycdn.com') || u.hostname.endsWith('.cdninstagram.com') || u.hostname.endsWith('.fbcdn.net') || u.hostname === 'platform-lookaside.fbsbx.com') ? u.href : null) : (u.hostname === 'open.spotify.com' ? u.href : null);
   } catch { return null; }
 }
 function time(ms) {
@@ -87,7 +87,7 @@ let paletteSource = null;
 const spectrumBars = [], musicParticles = [];
 let listeningStats = null, statsPeriod = 30;
 let presenceSession = null, presenceItems = [], presenceBusy = false;
-let presenceRefreshId = 0;
+let presenceRefreshId = 0, presenceLimit = 20;
 function coverPalette(pixels) {
   const buckets = new Map();
   for (let i = 0; i < pixels.length; i += 4) {
@@ -668,7 +668,7 @@ async function pollStats() {
 function renderPresence(items) {
   presenceItems = items || [];
   const wall = $('presence-wall'); wall.replaceChildren();
-  for (const person of presenceItems) {
+  for (const person of presenceItems.slice(0, presenceLimit)) {
     let guestUrl = null;
     if (person.source === 'guest' && person.url) { try { const parsed = new URL(person.url); if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) guestUrl = parsed.href; } catch {} }
     const link = person.source === 'guest' ? el(guestUrl ? 'a' : 'div') : person.url ? externalLink(person.url, '') : el('div');
@@ -677,6 +677,11 @@ function renderPresence(items) {
     const avatar = el('span', 'presence-avatar', (person.name || '?').slice(0, 1).toUpperCase());
     if (safeUrl(person.image, true)) { const image = el('img'); image.src = person.image; image.alt = ''; image.width = image.height = 40; image.loading = 'lazy'; avatar.replaceChildren(image); }
     const copy = el('span', 'presence-person-copy'); copy.append(el('strong', '', person.name), el('small', '', relativeTime(person.presentAt)));
+    const postedAt = new Date(person.presentAt);
+    if (Number.isFinite(postedAt.getTime())) {
+      const stamp = el('time', 'presence-date', postedAt.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/Bahia'}));
+      stamp.dateTime = postedAt.toISOString(); stamp.title = 'Horário da Bahia'; copy.append(stamp);
+    }
     link.append(avatar, copy); if (person.source === 'guest' ? guestUrl : person.url) link.append(icon('arrow'));
     const entry = el('article', 'presence-entry'); entry.append(link);
     if (person.source === 'guest') copy.append(el('small', '', 'Visitante · perfil informado'));
@@ -689,10 +694,20 @@ function renderPresence(items) {
         } catch {}
       }
       entry.append(links);
+      for (const preview of (person.previews || []).slice(0, 2)) {
+        if (![person.instagramUrl, person.spotifyUrl].includes(preview.url) || !/^https:\/\/(?:www\.instagram\.com\/|open\.spotify\.com\/)/.test(preview.url)) continue;
+        const card = el('a', 'presence-preview'); card.href = preview.url; card.target = '_blank'; card.rel = 'noopener noreferrer nofollow ugc';
+        const imageUrl = safeUrl(preview.image, true);
+        if (imageUrl) { const image = el('img'); image.src = imageUrl; image.alt = ''; image.width = image.height = 52; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer'; image.addEventListener('error', () => { image.hidden = true; }, {once:true}); card.append(image); }
+        const text = el('span'); text.append(el('small', '', preview.provider + (preview.type === 'playlist' ? ' · Playlist' : ' · Perfil')), el('strong', '', preview.title));
+        if (preview.description) text.append(el('span', 'presence-preview-description', preview.description));
+        card.append(text); entry.append(card);
+      }
     }
     wall.append(entry);
   }
   if (!presenceItems.length) wall.append(el('p', 'presence-empty', 'O mural tá aberto. O próximo nome pode ser o teu.'));
+  $('more-presences').hidden = presenceItems.length <= presenceLimit;
   const mine = presenceItems.some(item => item.id === presenceSession?.profile?.id);
   updateGuestControls();
   $('presence-remove').hidden = !mine;
@@ -766,6 +781,18 @@ async function presenceAction(action) {
   } catch { $('presence-feedback').textContent = 'Não consegui confirmar agora. Entra de novo e tenta mais uma vez.'; }
   finally { presenceBusy = false; $('presence-mark').disabled = $('presence-remove').disabled = $('presence-logout').disabled = false; }
 }
+function normalizeGuestInput(value, kind) {
+  let text = String(value || '').trim();
+  if (/^(?:www\.)?instagram\.com\//i.test(text) || /^open\.spotify\.com\//i.test(text)) return 'https://' + text;
+  if (kind === 'instagram' && /^@?[A-Za-z0-9._]{1,30}$/.test(text)) return 'https://www.instagram.com/' + text.replace(/^@/, '') + '/';
+  if (kind === 'spotify') {
+    if (/^spotify:(?:user|playlist):[A-Za-z0-9._-]+$/.test(text)) return 'https://open.spotify.com/' + text.slice(8).replace(':', '/');
+    if (/^(?:user|playlist)\/[A-Za-z0-9._-]+$/.test(text)) return 'https://open.spotify.com/' + text;
+    if (/^@?[A-Za-z0-9._-]{1,64}$/.test(text)) return 'https://open.spotify.com/user/' + text.replace(/^@/, '');
+  }
+  return text;
+}
+for (const [id, kind] of [['guest-url','instagram'],['guest-spotify-url','spotify']]) $(id).addEventListener('blur', () => { $(id).value = normalizeGuestInput($(id).value, kind); });
 let guestBusy = false;
 function updateGuestControls() {
   const marked = presenceItems.some(item => item.id === presenceSession?.guest?.id);
@@ -776,12 +803,12 @@ function updateGuestControls() {
 }
 async function guestAction(remove = false) {
   if (guestBusy || (!remove && presenceItems.some(item => item.id === presenceSession?.guest?.id))) return;
-  guestBusy = true; $('guest-submit').disabled = $('guest-remove').disabled = true;
+  guestBusy = true; $('guest-submit').disabled = $('guest-remove').disabled = true; $('guest-submit').textContent = 'Publicando…';
   try {
     if (!presenceSession?.guest) await pollPresence();
     if (!presenceSession?.guest) throw new Error('session');
-    const body = { csrf:presenceSession.guest.csrf, name:$('guest-name').value, comment:$('guest-comment').value, instagramUrl:$('guest-url').value, spotifyUrl:$('guest-spotify-url').value, website:$('guest-website').value };
-    const response = await fetch('/api/presenca?acao=' + (remove ? 'remover-convidado' : 'convidado'), { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(12000) });
+    const body = { csrf:presenceSession.guest.csrf, name:$('guest-name').value, comment:$('guest-comment').value, instagramUrl:normalizeGuestInput($('guest-url').value,'instagram'), spotifyUrl:normalizeGuestInput($('guest-spotify-url').value,'spotify'), website:$('guest-website').value };
+    const response = await fetch('/api/presenca?acao=' + (remove ? 'remover-convidado' : 'convidado'), { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(18000) });
     if (!response.ok) throw Object.assign(new Error('unavailable'), {status:response.status});
     const data = await response.json(); renderPresence(data.items);
     $('guest-feedback').textContent = remove ? 'Tua presença saiu do mural.' : 'Teu salve tá no mural. Valeu por colar!';
@@ -790,6 +817,7 @@ async function guestAction(remove = false) {
     $('guest-feedback').textContent = error.status === 429 ? 'Muitos envios por agora. Tenta de novo mais tarde.' : error.status === 409 ? 'Esse perfil já deixou presença no mural. Não vou duplicar o mesmo perfil.' : error.status === 400 ? 'Confere teu nome e os links completos do Instagram ou Spotify. O comentário pode ter até 280 caracteres.' : 'Não consegui salvar agora. Atualiza a página e tenta novamente.';
   } finally { guestBusy = false; updateGuestControls(); }
 }
+$('more-presences').addEventListener('click', () => { presenceLimit += 20; renderPresence(presenceItems); });
 $('guest-form').addEventListener('submit', event => { event.preventDefault(); guestAction(); });
 $('guest-remove').addEventListener('click', () => guestAction(true));
 $('presence-mark').addEventListener('click', () => presenceAction('marcar'));

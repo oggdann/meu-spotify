@@ -326,3 +326,17 @@ test('unavailable statistics use visitor-facing copy and hide empty metric cards
   assert.doesNotMatch(h.node('stats-context').textContent,/tu |você|Tentarei|zero/);
   assert.equal(h.node('stats-artists').children[0].textContent,'Dados temporariamente indisponíveis.');
 });
+
+test('older wall entries remain available through the mobile show-more control',()=>{
+  const h=playerHarness(()=>Promise.resolve(publicJson({})));
+  h.run("renderPresence(Array.from({length:25},(_,i)=>({id:'guest-'+i,name:'Visitor '+i,source:'guest',presentAt:Date.now()-i*86400000})))");
+  assert.equal(h.node('presence-wall').children.length,20);assert.equal(h.node('more-presences').hidden,false);
+  h.node('more-presences').listeners.get('click')();assert.equal(h.node('presence-wall').children.length,25);assert.equal(h.node('more-presences').hidden,true);
+});
+test('wall shows the posting date in Bahia and the public playlist preview',()=>{
+  const h=playerHarness(()=>Promise.resolve(publicJson({})));
+  h.run("renderPresence([{id:'guest-one',name:'One',source:'guest',spotifyUrl:'https://open.spotify.com/playlist/1111111111111111111111',presentAt:Date.parse('2026-11-16T19:00:00Z'),previews:[{url:'https://open.spotify.com/playlist/1111111111111111111111',provider:'Spotify',type:'playlist',title:'Minha playlist',description:'40 músicas',image:'https://i.scdn.co/image/cover'}]}])");
+  const entry=h.node('presence-wall').children[0],date=entry.children[0].children[1].children.find(n=>n.className==='presence-date');
+  assert.equal(date.dateTime,'2026-11-16T19:00:00.000Z');assert.match(date.textContent,/16\/11\/2026/);assert.match(date.textContent,/04:00|4:00/);
+  const preview=entry.children.find(n=>n.className==='presence-preview');assert.equal(preview.href,'https://open.spotify.com/playlist/1111111111111111111111');assert.match(preview.rel,/ugc/);
+});

@@ -375,3 +375,5 @@ body .cover-card.has-video{animation:none!important;translate:none!important;tra
 .youtube-search-link[hidden]{display:none}
 
 .presence-socials{display:flex;flex-wrap:wrap;gap:16px;font-size:11px;color:var(--accent);margin-top:7px}.presence-socials a{padding-block:7px}.guest-form input:disabled,.guest-form textarea:disabled{opacity:.55}.guest-form button:disabled{opacity:.65;cursor:default}
+
+.presence-person-copy time{font-size:10px;color:var(--muted);line-height:1.5}.presence-preview{display:flex;align-items:flex-start;gap:11px;padding:11px;border:1px solid var(--line);border-radius:10px;margin-top:9px;min-width:0}.presence-preview img{width:52px;height:52px;border-radius:8px;object-fit:cover;flex:none}.presence-preview>span{display:grid;gap:4px;min-width:0}.presence-preview small{font-size:10px;color:var(--muted)}.presence-preview strong{font-size:12px;line-height:1.5;overflow-wrap:anywhere}.presence-preview-description{font-size:11px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
