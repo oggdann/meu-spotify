@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPresenceHandler,presenceCallback,publicVisitor} from '../lib/presence.js';
+import {createPresenceHandler,presenceCallback,publicVisitor,guestProfile} from '../lib/presence.js';
 process.env.OGG_PRESENCE_SECRET='test-presence-secret-for-this-process';
 process.env.SPOTIFY_CLIENT_ID='test-client';
 process.env.SPOTIFY_CLIENT_SECRET='test-secret';
@@ -70,4 +70,22 @@ test('profile quota exhaustion returns a distinct retry result without creating 
   const s=await start();let calls=0;globalThis.fetch=async()=>++calls===1?json({access_token:'guest'}):new Response(JSON.stringify({error:{reason:'QUOTA_EXCEEDED'}}),{status:429,headers:{'Retry-After':'7200'}});
   const r=response();await presenceCallback({url:'/api/retorno?code=code&state='+s.state,headers:{cookie:s.cookie}},r);
   assert.match(r.url,/presenca=spotify-limite&aguarde=7200/);assert.equal(typeof r.headers['Set-Cookie'],'string');
+});
+
+test('open guest wall validates optional links and comment lengths without requiring Spotify',()=>{
+  assert.equal(guestProfile({name:'Dan',comment:'Salve',url:'https://instagram.com/oggdann'},'id').source,'guest');
+  assert.equal(guestProfile({name:'Dan'},'id').url,null);
+  for(const body of [{name:'x'},{name:'Dan',url:'javascript:alert(1)'},{name:'Dan',url:'https://user:pass@example.com'},{name:'Dan',comment:'a'.repeat(281)},{name:'Dan',website:'spam'}])assert.equal(guestProfile(body,'id'),null);
+});
+test('guest can post and remove only their own presence without Spotify calls; CSRF and throttling apply',async()=>{
+  let upstream=0;globalThis.fetch=async()=>{upstream++;throw Error('must not call Spotify')};const writes=[];
+  const h=createPresenceHandler({store:()=>({mark:async(profile,key)=>{writes.push({profile,key});return [profile]},removePresence:async key=>{assert.equal(key,writes[0].key);return []}})});
+  const me=response();await h(req('eu'),me);assert.ok(me.body.guest.csrf);
+  const cookie=me.headers['Set-Cookie'].split(';')[0],headers={origin:root,cookie,'x-vercel-forwarded-for':'guest-test'};
+  const body={csrf:me.body.guest.csrf,name:'Visitante',comment:'Salve OGG!',url:'https://instagram.com/visitante'};
+  for(const override of [{origin:'https://evil.example'}, {cookie:cookie+'bad'}]){const r=response();await h(req('convidado',{method:'POST',headers:{...headers,...override},body}),r);assert.equal(r.code,403);}
+  for(let i=0;i<5;i++){const r=response();await h(req('convidado',{method:'POST',headers,body}),r);assert.equal(r.code,200);assert.equal(r.body.items[0].source,'guest');}
+  const limited=response();await h(req('convidado',{method:'POST',headers,body}),limited);assert.equal(limited.code,429);
+  const removed=response();await h(req('remover-convidado',{method:'POST',headers,body:{...body,id:'someone-else'}}),removed);assert.equal(removed.code,200);assert.deepEqual(removed.body.items,[]);
+  assert.equal(upstream,0);assert.equal(writes[0].profile.id,me.body.guest.id);
 });

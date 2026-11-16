@@ -423,6 +423,8 @@ async function selectContent(content, { follow = false, play = true, automatic =
   // Detach before pausing so late iframe events cannot change the new intent.
   detachController(); state.transitioning = true; state.unavailable = false;
   $('player-unavailable').hidden = true;
+  $('youtube-search-link').href = 'https://www.youtube.com/results?search_query=' + encodeURIComponent((content.title || '') + ' ' + (content.artist || content.primaryArtist || ''));
+  $('youtube-search-link').hidden = true;
   state.selected = content; state.follow = follow; $('follow').checked = follow;
   state.positionMs = 0; state.playbackDurationMs = content.durationMs || 0;
   setMusicScene(content);
@@ -449,7 +451,8 @@ async function selectContent(content, { follow = false, play = true, automatic =
 
     ensureYouTube();
   } else if (state.preferred === 'youtube') unavailableYouTube(content.uri.startsWith('spotify:playlist:') ? 'Esta playlist abre no Spotify. Para ouvir pelo YouTube, escolha uma faixa da lista de recentes.' : youtubeUnavailableMessage(match?.reason));
-  else useSpotify(content, play);
+  else useSpotify(content, play, match?.reason ? youtubeUnavailableMessage(match.reason) : '');
+  $('youtube-search-link').hidden = Boolean(match?.videoId) || !content.uri.startsWith('spotify:track:');
   if (!automatic) {
 
     toast(follow ? 'Na mesma frequência do OGG.' : `No player: ${content.title || 'playlist'}`);
@@ -549,7 +552,7 @@ function renderPlaylists() {
     const button = el('button', 'playlist-play'); button.append(icon('play')); button.setAttribute('aria-label', `Ouvir ${p.name}`); button.addEventListener('click', () => selectContent({ uri: p.uri, title: p.name })); art.append(button);
     const heading = el('h3', '', p.name); heading.title = p.name;
     const desc = el('p', 'playlist-desc', p.description || 'Uma seleção pra entrar na vibe.');
-    const meta = el('div', 'playlist-meta'); meta.append(el('span', '', `${p.total} FAIXAS`)); const link = externalLink(p.url, 'Spotify'); link.append(icon('arrow')); meta.append(link);
+    const meta = el('div', 'playlist-meta'); meta.append(el('span', '', Number.isInteger(p.total) ? `${p.total} FAIXAS` : 'MINHA PLAYLIST')); const link = externalLink(p.url, 'Spotify'); link.append(icon('arrow')); meta.append(link);
     card.append(art, heading, desc, meta); grid.append(card);
   }
   $('more-playlists').hidden = items.length <= state.playlistLimit;
@@ -580,7 +583,7 @@ function renderLibrary(data) {
   if (safeUrl(data.profile.image, true)) $('profile-image').src = data.profile.image;
   $('profile-image').alt = `Perfil de ${data.profile.name}`;
   $('playlist-count').textContent = ['ready', 'stale'].includes(data.availability?.playlists) ? String(data.playlists.length) : '—';
-  $('playlists-note').textContent = data.availability?.playlists === 'stale' ? 'Última atualização disponível. O Spotify limitou as consultas; as playlists serão atualizadas quando liberar.' : data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Playlists públicas que eu criei. Abre no Spotify e salva a tua favorita.';
+  $('playlists-note').textContent = data.availability?.playlists === 'stale' ? 'Última atualização disponível. O Spotify limitou as consultas; as playlists serão atualizadas quando liberar.' : data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Minhas duas playlists. Capas e nomes acompanham as atualizações no Spotify.';
   renderPlaylists(); renderRecent();
 }
 $('playlist-search').addEventListener('input', () => { state.playlistLimit = 8; renderPlaylists(); });
@@ -663,14 +666,23 @@ function renderPresence(items) {
   presenceItems = items || [];
   const wall = $('presence-wall'); wall.replaceChildren();
   for (const person of presenceItems) {
-    const link = externalLink(person.url, ''); link.className = 'presence-person';
+    let guestUrl = null;
+    if (person.source === 'guest' && person.url) { try { const parsed = new URL(person.url); if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) guestUrl = parsed.href; } catch {} }
+    const link = person.source === 'guest' ? el(guestUrl ? 'a' : 'div') : person.url ? externalLink(person.url, '') : el('div');
+    if (guestUrl) { link.href = guestUrl; link.target = '_blank'; link.rel = 'noopener noreferrer nofollow ugc'; }
+    link.className = 'presence-person';
     const avatar = el('span', 'presence-avatar', (person.name || '?').slice(0, 1).toUpperCase());
     if (safeUrl(person.image, true)) { const image = el('img'); image.src = person.image; image.alt = ''; image.width = image.height = 40; image.loading = 'lazy'; avatar.replaceChildren(image); }
     const copy = el('span', 'presence-person-copy'); copy.append(el('strong', '', person.name), el('small', '', relativeTime(person.presentAt)));
-    link.append(avatar, copy, icon('arrow')); wall.append(link);
+    link.append(avatar, copy); if (person.source === 'guest' ? guestUrl : person.url) link.append(icon('arrow'));
+    const entry = el('article', 'presence-entry'); entry.append(link);
+    if (person.source === 'guest') copy.append(el('small', '', 'Visitante · perfil informado'));
+    if (person.comment) entry.append(el('p', 'presence-comment', person.comment));
+    wall.append(entry);
   }
   if (!presenceItems.length) wall.append(el('p', 'presence-empty', 'O mural tá aberto. O próximo nome pode ser o teu.'));
   const mine = presenceItems.some(item => item.id === presenceSession?.profile?.id);
+  $('guest-remove').hidden = !presenceItems.some(item => item.id === presenceSession?.guest?.id);
   $('presence-remove').hidden = !mine;
   $('presence-mark').textContent = mine ? 'Minha presença tá marcada' : 'Marcar minha presença';
 }
@@ -682,6 +694,8 @@ async function pollPresence() {
   const accountReady = jobs[1].status === 'fulfilled';
   if (accountReady) {
     presenceSession = jobs[1].value;
+    $('guest-submit').disabled = !presenceSession.guest;
+    $('guest-remove').hidden = !presenceItems.some(item => item.id === presenceSession.guest?.id);
     const signedIn = Boolean(presenceSession.profile);
     $('presence-login').hidden = signedIn || !presenceSession.enabled;
     $('presence-session').hidden = !signedIn;
@@ -741,6 +755,25 @@ async function presenceAction(action) {
   } catch { $('presence-feedback').textContent = 'Não consegui confirmar agora. Entra de novo e tenta mais uma vez.'; }
   finally { presenceBusy = false; $('presence-mark').disabled = $('presence-remove').disabled = $('presence-logout').disabled = false; }
 }
+let guestBusy = false;
+async function guestAction(remove = false) {
+  if (guestBusy) return;
+  guestBusy = true; $('guest-submit').disabled = $('guest-remove').disabled = true;
+  try {
+    if (!presenceSession?.guest) await pollPresence();
+    if (!presenceSession?.guest) throw new Error('session');
+    const body = { csrf:presenceSession.guest.csrf, name:$('guest-name').value, comment:$('guest-comment').value, url:$('guest-url').value, website:$('guest-website').value };
+    const response = await fetch('/api/presenca?acao=' + (remove ? 'remover-convidado' : 'convidado'), { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(12000) });
+    if (!response.ok) throw Object.assign(new Error('unavailable'), {status:response.status});
+    const data = await response.json(); renderPresence(data.items);
+    $('guest-feedback').textContent = remove ? 'Tua presença saiu do mural.' : 'Teu salve tá no mural. Valeu por colar!';
+    if (!remove) $('guest-comment').value = '';
+  } catch (error) {
+    $('guest-feedback').textContent = error.status === 429 ? 'Muitos envios por agora. Tenta de novo mais tarde.' : error.status === 400 ? 'Confere teu nome e o link completo começando com https://. O comentário pode ter até 280 caracteres.' : 'Não consegui salvar agora. Atualiza a página e tenta novamente.';
+  } finally { guestBusy = false; $('guest-submit').disabled = $('guest-remove').disabled = false; }
+}
+$('guest-form').addEventListener('submit', event => { event.preventDefault(); guestAction(); });
+$('guest-remove').addEventListener('click', () => guestAction(true));
 $('presence-mark').addEventListener('click', () => presenceAction('marcar'));
 $('presence-remove').addEventListener('click', () => presenceAction('remover'));
 $('presence-logout').addEventListener('click', () => presenceAction('sair'));

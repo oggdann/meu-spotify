@@ -301,3 +301,14 @@ test('a slower old session response cannot undo a newer successful login',async(
   await h.run('pollPresence()');resolveOld(publicJson({profile:null,enabled:true}));await old;
   assert.equal(h.node('presence-login').hidden,true);assert.match(h.node('presence-greeting').textContent,/Visitante/);
 });
+test('guest comments render as plain text with optional external profile links',()=>{
+  const h=playerHarness(()=>Promise.resolve(publicJson({})));h.run("renderPresence([{id:'guest-one',name:'Visitante',comment:'<script>alert(1)</script>',source:'guest',url:'https://instagram.com/visitante',presentAt:Date.now()}])");
+  const entry=h.node('presence-wall').children[0],link=entry.children[0];
+  assert.equal(link.href,'https://instagram.com/visitante');assert.match(link.rel,/ugc/);assert.equal(entry.children[1].textContent,'<script>alert(1)</script>');
+});
+test('guest posting uses the local guest session and does not navigate to Spotify',async()=>{
+  let payload;const h=playerHarness((url,options)=>{payload={url,body:JSON.parse(options.body)};return Promise.resolve(publicJson({items:[]}))});
+  h.node('guest-name').value='Visitante';h.node('guest-comment').value='Salve!';h.node('guest-url').value='';h.node('guest-website').value='';
+  await h.run("presenceSession={guest:{id:'guest-one',csrf:'guest-csrf'}};guestAction()");
+  assert.equal(payload.url,'/api/presenca?acao=convidado');assert.equal(payload.body.csrf,'guest-csrf');assert.equal(payload.body.comment,'Salve!');assert.match(h.node('guest-feedback').textContent,/tá no mural/);
+});

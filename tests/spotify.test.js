@@ -35,19 +35,13 @@ test('unsupported HTTP methods do not call Spotify', () => {
   const r = scenario(`globalThis.fetch=async()=>{throw Error('must not call')};const {default:h}=await import('./api/musica.js');const r=response();await h({method:'POST'},r);console.log(JSON.stringify(r));`);
   assert.equal(r.code, 405); assert.equal(r.headers.Allow, 'GET, HEAD');
 });
-test('library only publishes owned public playlists and public profile fields', () => {
-  const r = scenario(`globalThis.fetch=async(url)=>{
-    if(url.includes('/api/token'))return json({access_token:'never-public-access',scope:'user-read-currently-playing user-read-recently-played',expires_in:3600});
-    if(url.endsWith('/me'))return json({id:'owner',display_name:'OGG',email:'private@example.com',country:'BR',product:'premium',images:[],external_urls:{spotify:'https://open.spotify.com/user/owner'}});
-    if(url.includes('/me/playlists'))return json({items:[{id:'1111111111111111111111',name:'Public',public:true,owner:{id:'owner'},description:'<b>Good</b>',tracks:{total:2}},{id:'2222222222222222222222',name:'Private',public:false,owner:{id:'owner'}},{id:'3333333333333333333333',name:'Other owner',public:true,owner:{id:'other'}}],next:null});
-    return json({items:[{track,played_at:'2026-11-15T20:00:00Z'}]});};
-    const {default:h}=await import('./api/biblioteca.js');const r=response();await h({method:'GET'},r);console.log(JSON.stringify(r));`);
-  assert.equal(r.code, 200); assert.equal(r.body.playlists.length, 1); assert.equal(r.body.playlists[0].description, 'Good');
-  assert.equal(r.body.recent.length, 1); assert.doesNotMatch(JSON.stringify(r.body), /private@example|premium|never-public/);
+test('library shows only the two selected playlists and survives Spotify quota exhaustion',()=>{
+  const r=scenario(`globalThis.fetch=async(url)=>{calls.push(url);if(url.includes('/oembed?'))return json({title:'Minha playlist',thumbnail_url:'https://i.scdn.co/image/cover'});if(url.includes('/api/token'))return json({access_token:'test',expires_in:3600,scope:'user-read-recently-played'});return json({error:{reason:'QUOTA_EXCEEDED'}},429,{'Retry-After':'7200'})};const {default:h}=await import('./api/biblioteca.js');const r=response();await h({method:'GET'},r);console.log(JSON.stringify({r,calls}));`);
+  assert.equal(r.r.code,200);assert.deepEqual(r.r.body.playlists.map(p=>p.id),['306AubstP6UatfIUhynAX8','5Q6OaPkyTIu8CaZSg4fwVr']);assert.equal(r.r.body.availability.playlists,'ready');assert.equal(r.r.body.availability.recent,'quota_exceeded');assert.ok(r.calls.every(url=>!url.includes('/me/playlists')));assert.doesNotMatch(JSON.stringify(r.r.body),/never-public|access_token/);
 });
-test('missing history permission leaves profile and playlists working', () => {
-  const r = scenario(`globalThis.fetch=async(url)=>{calls.push(url);if(url.includes('/api/token'))return json({access_token:'test',scope:'user-read-currently-playing',expires_in:3600});if(url.endsWith('/me'))return json({id:'owner',display_name:'OGG'});if(url.includes('recently-played'))throw Error('must not request');return json({items:[],next:null});};const {default:h}=await import('./api/biblioteca.js');const r=response();await h({method:'GET'},r);console.log(JSON.stringify({r,calls}));`);
-  assert.equal(r.r.code, 200); assert.equal(r.r.body.availability.recent, 'permission_required'); assert.equal(r.calls.length, 3);
+test('missing history permission preserves the selected playlists without querying history',()=>{
+  const r=scenario(`globalThis.fetch=async(url)=>{calls.push(url);if(url.includes('/oembed?'))return json({title:'Seleção'});if(url.includes('/api/token'))return json({access_token:'test',expires_in:3600,scope:'user-read-currently-playing'});return json({id:'owner',display_name:'OGG'});};const {default:h}=await import('./api/biblioteca.js');const r=response();await h({method:'GET'},r);console.log(JSON.stringify({r,calls}));`);
+  assert.equal(r.r.body.playlists.length,2);assert.equal(r.r.body.availability.recent,'permission_required');assert.ok(r.calls.every(url=>!url.includes('recently-played')));
 });
 test('resource and public URL validation reject credential forwarding and executable links', () => {
   const r = scenario(`const {spotifyGet,spotifyUrl,imageUrl}=await import('./lib/spotify.js');let rejected=false;try{await spotifyGet('//evil.example/path')}catch{rejected=true}console.log(JSON.stringify({rejected,bad:spotifyUrl('javascript:alert(1)'),badImage:imageUrl('https://scdn.co.evil.example/image'),good:spotifyUrl('https://open.spotify.com/track/123')}));`);
@@ -77,4 +71,12 @@ test('quota exhaustion preserves the full provider wait and suppresses queries w
 test('a previous snapshot survives temporary quota failure and is labelled stale',()=>{
   const r=scenario(`let clock=1000;Date.now=()=>clock;let limited=false;globalThis.fetch=async(url)=>url.includes('/api/token')?json({access_token:'test',expires_in:3600}):limited?json({error:{reason:'QUOTA_EXCEEDED'}},429,{'Retry-After':'7200'}):json({items:[{id:'saved'}]});const {spotifyGet}=await import('./lib/spotify.js');await spotifyGet('/me/top/tracks');clock+=7200001;limited=true;const data=await spotifyGet('/me/top/tracks');console.log(JSON.stringify(data));`);
   assert.equal(r.items[0].id,'saved');assert.equal(r.__oggCache.stale,true);assert.equal(r.__oggCache.reason,'quota_exceeded');
+});
+test('selected playlist metadata refreshes names and covers after ten minutes without credentials',()=>{
+  const r=scenario(`let clock=1000;Date.now=()=>clock;let version=1;globalThis.fetch=async(url)=>{calls.push(url);return json({title:'Nome '+version,thumbnail_url:'https://i.scdn.co/image/cover'+version})};const {featuredPlaylists}=await import('./lib/featured-playlists.js');const first=await featuredPlaylists();clock+=60001;await featuredPlaylists();const warm=calls.length;version=2;clock+=600001;const updated=await featuredPlaylists();console.log(JSON.stringify({first,updated,warm,count:calls.length}));`);
+  assert.equal(r.warm,2);assert.equal(r.count,4);assert.equal(r.first.items[0].name,'Nome 1');assert.equal(r.updated.items[0].name,'Nome 2');assert.match(r.updated.items[0].image,/cover2$/);
+});
+test('selected playlist links remain available when metadata cannot be fetched',()=>{
+  const r=scenario(`globalThis.fetch=async()=>{throw Error('offline')};const {featuredPlaylists}=await import('./lib/featured-playlists.js');console.log(JSON.stringify(await featuredPlaylists()));`);
+  assert.equal(r.items.length,2);assert.equal(r.stale,true);assert.ok(r.items.every(p=>p.url.startsWith('https://open.spotify.com/playlist/')&&p.total===null));
 });
