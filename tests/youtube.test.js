@@ -119,3 +119,7 @@ test('YouTube quota exhaustion is distinct from a missing recording',()=>{
   const r=scenario("process.env.YOUTUBE_API_KEY='key';globalThis.fetch=async()=>{calls.push('request');return json({error:{errors:[{reason:'quotaExceeded'}]}},403)};const {resolveVideo}=await import('./lib/youtube.js');const song="+JSON.stringify(beijo)+";const a=await resolveVideo(song),b=await resolveVideo(song);console.log(JSON.stringify({a,b,count:calls.length}));");
   assert.equal(r.count,1);assert.equal(r.a.reason,'youtube_quota_exceeded');assert.equal(r.b.reason,'youtube_quota_exceeded');
 });
+test('Google rate limits retain Retry-After and never claim no match',()=>{
+  const r=scenario("process.env.YOUTUBE_API_KEY='key';globalThis.fetch=async()=>{calls.push('request');return new Response(JSON.stringify({error:{errors:[{reason:'rateLimitExceeded'}]}}),{status:429,headers:{'Retry-After':'120'}})};const {resolveVideo}=await import('./lib/youtube.js');const song="+JSON.stringify(beijo)+";const a=await resolveVideo(song),b=await resolveVideo(song);console.log(JSON.stringify({a,b,count:calls.length}));");
+  assert.equal(r.count,1);assert.equal(r.a.reason,'youtube_rate_limited');assert.ok(r.a.retryAfter>=119);assert.equal(r.b.reason,'youtube_rate_limited');
+});

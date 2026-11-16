@@ -412,6 +412,7 @@ async function findVideo(content) {
   return videoMatches.get(id).task;
 }
 function youtubeUnavailableMessage(reason) {
+  if (reason === 'youtube_rate_limited') return 'O YouTube limitou as consultas agora. A busca vai tentar de novo depois da pausa; isso não significa que a faixa não existe lá. Tu também pode escolher o Spotify.';
   if (reason === 'youtube_quota_exceeded') return 'A busca do YouTube atingiu o limite de uso. Isso não significa que a música não existe lá. Usa o Spotify enquanto a busca se recupera.';
   if (['quota_exceeded', 'rate_limited'].includes(reason)) return 'O Spotify limitou a consulta desta faixa. O YouTube continua disponível, mas não consegui confirmar a música agora.';
   if (['search_unavailable', 'search_not_configured', 'unavailable', 'temporarily_unavailable'].includes(reason)) return 'A busca do YouTube está indisponível agora. Tenta mais tarde ou escolhe o Spotify.';
