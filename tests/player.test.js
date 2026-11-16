@@ -242,19 +242,22 @@ test('closing the floating video pauses intentionally and unrelated clicks do no
   assert.equal(h.run('state.wantsAudio'),false);assert.equal(h.run('state.audible'),false);assert.equal(h.node('inline-video-slot').classList.contains('is-floating'),false);assert.equal(player.plays,plays);
   h.node('dock-play').listeners.get('click')();assert.equal(h.node('inline-video-slot').classList.contains('is-floating'),true);assert.equal(h.run('state.audible'),true);
 });
-test('statistics do not show a fake minute total without full listening history',()=>{
+test('Spotify-only statistics ignore old collector payloads and never ask for local activation',()=>{
   const h=playerHarness(()=>Promise.resolve(result(null)));
-  h.context.stats={sampleSize:50,recentAvailability:'ready',periods:[{days:7,plays:12,estimatedMinutes:36,artists:[],tracks:[]}],top:{availability:'permission_required'}};
+  h.context.stats={sampleSize:50,recentAvailability:'ready',periods:[{days:7,plays:12,trackCount:8,minutes:null,artists:[],tracks:[]}],top:{availability:'permission_required'},measured:{periods:[{days:7,minutes:9999,plays:999}]}};
   h.run('statsPeriod=7;renderStats(stats)');
-  assert.equal(h.node('stats-minutes').textContent,'—');
-  assert.match(h.node('stats-minutes-status').textContent,/ainda não começou/);
+  assert.equal(h.node('stats-plays').textContent,'12');
+  assert.equal(h.node('stats-track-count').textContent,'8');
+  assert.equal(h.node('stats-metrics').hidden,false);
   assert.match(h.node('stats-context').textContent,/recorte/);
-  assert.match(h.node('stats-footnote').textContent,/Não cobre necessariamente/);
+  assert.match(h.node('stats-footnote').textContent,/não é disponibilizado/);
+  assert.doesNotMatch(h.node('stats-footnote').textContent,/coletor|instala|ativação|começa com o monitoramento/);
 });
-test('real collector updates replace the placeholder and refresh the displayed minutes',()=>{
+test('official four-week Spotify rankings show without misleading sample totals or minute placeholders',()=>{
   const h=playerHarness(()=>Promise.resolve(result(null)));
-  h.context.stats={recentAvailability:'ready',sampleSize:50,periods:[],top:{availability:'permission_required'},measured:{startedAt:Date.now()-3600000,updatedAt:Date.now(),periods:[{days:7,start:Date.now()-3600000,end:Date.now(),minutes:120,plays:40,artists:[],tracks:[]}]}};
-  h.run('statsPeriod=7;renderStats(stats)');assert.equal(h.node('stats-minutes').textContent,'120');assert.equal(h.node('stats-plays').textContent,'40');
-  h.run('stats.measured.periods[0].minutes=121;renderStats(stats)');assert.equal(h.node('stats-minutes').textContent,'121');
-  assert.match(h.node('stats-disclosure').textContent,/Pausas e saltos/);
+  h.context.stats={recentAvailability:'ready',sampleSize:50,periods:[{days:30,plays:50,trackCount:42}],top:{availability:'ready',artists:[],tracks:[]}};
+  h.run('statsPeriod=30;renderStats(stats)');
+  assert.equal(h.node('stats-metrics').hidden,true);
+  assert.match(h.node('stats-context').textContent,/oficial.*4 semanas/);
+  assert.match(h.node('stats-disclosure').textContent,/atualizados automaticamente/);
 });

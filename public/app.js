@@ -593,21 +593,17 @@ async function pollNow() {
 }
 function renderStats(data) {
   listeningStats = data;
-  const recent = data.periods?.find(item => item.days === statsPeriod);
-  const measured = data.measured?.periods?.find(item => item.days === statsPeriod);
-  const period = measured || recent;
+  const period = data.periods?.find(item => item.days === statsPeriod);
   const format = value => Number(value || 0).toLocaleString('pt-BR');
-  const date = value => new Date(value).toLocaleDateString('pt-BR', { day:'2-digit',month:'short',timeZone:'America/Bahia' });
   $('stats-week').setAttribute('aria-pressed', String(statsPeriod === 7));
   $('stats-month').setAttribute('aria-pressed', String(statsPeriod === 30));
-  $('stats-plays').textContent = measured || data.recentAvailability === 'ready' ? format(period?.plays) : '—';
-  $('stats-plays-label').textContent = measured ? 'PLAYS REGISTRADOS' : 'PLAYS NO RECORTE RECENTE';
-  $('stats-plays-status').textContent = measured ? 'Reproduções acompanhadas por pelo menos 30 s' : 'Até ' + (data.sampleSize || 50) + ' registros disponíveis';
-  $('stats-minutes').textContent = measured ? format(measured.minutes) : '—';
-  $('stats-minutes-status').textContent = measured ? 'Tempo de reprodução acompanhado' : 'A contagem contínua ainda não começou';
   const official = statsPeriod === 30 && data.top?.availability === 'ready';
-  $('stats-context').textContent = measured ? (statsPeriod === 7 ? 'Esta semana' : 'Este mês') + ' · registros de ' + date(period.start) + ' a ' + date(period.end) + '.' : official ? 'Rankings oficiais do Spotify · últimas 4 semanas.' : 'Últimos 7 dias · ranking do recorte recente.';
-  $('stats-disclosure').textContent = measured ? 'Os minutos somam o tempo realmente acompanhado pelo registro contínuo. Pausas e saltos não viram minutos; períodos sem monitoramento ficam de fora.' : 'O Spotify não fornece o total de minutos da semana ou do mês por esta conexão. O recorte de até 50 plays não é o teu histórico completo.';
+  $('stats-metrics').hidden = official;
+  $('stats-plays').textContent = data.recentAvailability === 'ready' ? format(period?.plays) : '—';
+  $('stats-track-count').textContent = data.recentAvailability === 'ready' && Number.isInteger(period?.trackCount) ? format(period.trackCount) : '—';
+  $('stats-plays-status').textContent = 'Até ' + (data.sampleSize || 50) + ' registros disponíveis';
+  $('stats-context').textContent = official ? 'Ranking oficial do Spotify · últimas 4 semanas.' : 'Últimos ' + statsPeriod + ' dias · ranking do recorte recente.';
+  $('stats-disclosure').textContent = official ? 'Artistas e músicas mais ouvidos segundo o Spotify, atualizados automaticamente.' : 'Contagens dentro das últimas ' + (data.sampleSize || 50) + ' reproduções disponíveis. Esse recorte pode não cobrir o período inteiro.';
   for (const type of ['artists', 'tracks']) {
     const list = $('stats-' + type); list.replaceChildren();
     const entries = official ? data.top[type] : period?.[type] || [];
@@ -623,12 +619,12 @@ function renderStats(data) {
         link.prepend(image);
       }
       row.append(link);
-      if (!official) row.append(el('span', 'stats-rank-count', measured ? format(Math.floor(item.heardMs / 60000)) + ' min' : String(item.count) + '×'));
+      if (!official) row.append(el('span', 'stats-rank-count', String(item.count) + '×'));
       list.append(row);
     });
     if (!entries.length) list.append(el('li', 'stats-empty', 'Sem registros neste recorte.'));
   }
-  $('stats-footnote').textContent = (official ? 'Artistas e músicas: ranking oficial do Spotify, últimas 4 semanas. ' : measured ? 'Artistas e músicas ordenados pelo tempo registrado neste período. ' : 'Base do ranking: últimas 50 reproduções. Não cobre necessariamente a semana inteira. ') + (measured ? 'Registro iniciado em ' + date(data.measured.startedAt) + ' · última atualização ' + relativeTime(data.measured.updatedAt) + '.' : 'A contagem de minutos começa com o monitoramento; datas anteriores precisam do histórico exportado pelo Spotify.');
+  $('stats-footnote').textContent = (official ? '' : 'Base do ranking: últimas 50 reproduções. Não cobre necessariamente o período inteiro. ') + 'O total de minutos ouvidos mostrado no aplicativo não é disponibilizado pela conexão oficial do Spotify.';
 }
 $('stats-week').addEventListener('click', () => { statsPeriod = 7; if (listeningStats) renderStats(listeningStats); });
 $('stats-month').addEventListener('click', () => { statsPeriod = 30; if (listeningStats) renderStats(listeningStats); });

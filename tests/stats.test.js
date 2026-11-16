@@ -25,7 +25,8 @@ function scenario(body){
 test('missing top permission keeps recent statistics available without unauthorized top calls',()=>{
   const r=scenario("globalThis.fetch=async(url)=>{calls.push(url);return url.includes('/api/token')?json({access_token:'access',scope:'user-read-recently-played',expires_in:3600}):json({items:["+JSON.stringify(row(1))+"]})};const {default:h}=await import('./api/estatisticas.js');const r=response();await h({method:'GET'},r);console.log(JSON.stringify({r,calls}));");
   assert.equal(r.r.code,200);assert.equal(r.r.body.recentAvailability,'ready');assert.equal(r.r.body.top.availability,'permission_required');
-  assert.equal(r.r.body.exactMinutesAvailability,'extended_history_required');
+  assert.equal(r.r.body.exactMinutesAvailability,'not_provided_by_spotify_api');
+  assert.equal(Object.hasOwn(r.r.body,'measured'),false);
   assert.ok(r.calls.every(url=>!url.includes('/me/top/')));
   assert.doesNotMatch(JSON.stringify(r.r.body),/never-public|access_token/);
 });

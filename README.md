@@ -4,7 +4,7 @@ Site pessoal de Daniel Victor (@oggdann): faixa atual, perfil, playlists própri
 
 ## Rodar
 
-Node 22 ou superior. Execute `npm ci` e configure as variáveis de `.env.example` no ambiente do processo. `npm run dev` abre em localhost:3000; `npm test` executa os testes Node. `python -m unittest discover -s tests -p 'collector_test.py'` verifica o registro de minutos. A Vercel entrega `public/` e as funções de `api/`.
+Node 22 ou superior. Execute `npm ci` e configure as variáveis de `.env.example` no ambiente do processo. `npm run dev` abre em localhost:3000; `npm test` executa os testes Node. A Vercel entrega `public/` e as funções de `api/`.
 
 ## Reprodução
 
@@ -36,11 +36,9 @@ A faixa atual informa também a playlist de origem quando o contexto do Spotify 
 
 A identidade OGG aparece no início, na assinatura separada da capa, nos links de Instagram/Spotify, nos metadados e no crédito persistente do player. A logo original não cobre mais o nome do álbum. A capa pode ser tocada/acionada com teclado para alternar o modo imersivo. Paletas claras sobre fundo escuro são extraídas da capa; luzes, partículas e três cenas de movimento variam por faixa. A posição visual usa a linha do tempo do player ativo. São efeitos de capa, faixa e estado de reprodução, sem alegar análise de graves ou FFT do áudio dos iframes. O sistema respeita redução de movimento.
 
-O bloco de estatísticas alterna Semana/Mês. Sem monitoramento, os plays são um recorte de até 50 reproduções e os minutos ficam indisponíveis: não somamos durações de músicas como se fossem tempo ouvido. A opção Mês mostra os rankings oficiais do Spotify das últimas quatro semanas quando há `user-top-read`; esse período é identificado separadamente dos totais registrados.
+As estatísticas vêm somente da Web API oficial do Spotify, consultada pelas funções do site na Vercel. Nenhum componente, script, serviço ou comando é instalado ou executado no computador pessoal do proprietário. A faixa atual acompanha a conta do Spotify, independentemente de qual aparelho estiver tocando.
 
-O coletor Windows de `public/coletor/` mede avanços de reprodução, preserva SQLite no PC e envia resumos da semana/mês de calendário no fuso America/Bahia. O site mostra apenas “minutos registrados”, com início e última atualização. Pausas, saltos, intervalos sem monitoramento e trocas ambíguas ficam de fora. O total pode diferir do aplicativo Spotify. A exportação oficial pode recuperar histórico anterior; a importação ignora dados como IP e não duplica os mesmos arquivos ou observações sobrepostas. Veja [instruções do coletor](public/coletor/LEIA-ME.md).
-
-`/api/coletor` exige credencial exclusiva de envio; o bootstrap exige a chave privada de configuração e expira separadamente do OAuth do proprietário. O token fica protegido por DPAPI no Windows. Runtime Cache entrega a atualização corrente e Blob privado guarda um checkpoint por hora. SQLite mantém os detalhes duráveis no PC; o coletor reenvia o resumo completo a cada minuto. O site não depende de visitas para receber atualizações enquanto o PC e o coletor estiverem ativos.
+A opção “4 semanas” mostra os artistas e músicas do ranking oficial `short_term`, com `user-top-read`. A opção “7 dias” mostra apenas o recorte de até 50 reproduções recentes disponível pela API, com contagens de plays e faixas distintas identificadas como parciais. O total de minutos ouvidos do aplicativo Spotify não é disponibilizado por esses endpoints e não é calculado a partir da duração das faixas. O site não promete uma futura ativação desse total nem usa dados de um coletor externo.
 
 O mural em `/api/presenca` usa OAuth Spotify com PKCE, estado assinado, cookies Secure/HttpOnly e CSRF nas alterações. O visitante confirma antes de publicar nome, foto e link; pode remover a própria presença e sair. Tokens do visitante não são persistidos e nunca substituem o refresh token do proprietário. São exibidos os últimos 30 dias, até 30 perfis. A repetição de uma marca é limitada a uma atualização por 15 minutos.
 

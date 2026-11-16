@@ -1,4 +1,3 @@
-import { measuredSnapshot } from '../lib/site-store.js';
 import { cached, getToken, imageUrl, publicTrack, readOnly, sendFailure, spotifyGet, spotifyUrl } from '../lib/spotify.js';
 
 export function summarizeRecent(items, now = Date.now()) {
@@ -20,7 +19,7 @@ export function summarizeRecent(items, now = Date.now()) {
         entry.count++; artists.set(entry.id, entry);
       }
     }
-    return { days, plays: rows.length, minutes: null, sampleOnly: true,
+    return { days, plays: rows.length, trackCount: tracks.size, artistCount: artists.size, minutes: null, sampleOnly: true,
       oldestRecord: rows.length ? new Date(Math.min(...rows.map(row => row.at))).toISOString() : null,
       artists: [...artists.values()].sort((a, b) => b.count - a.count).slice(0, 5),
       tracks: [...tracks.values()].sort((a, b) => b.count - a.count).slice(0, 5) };
@@ -49,10 +48,9 @@ export default async function handler(req, res) {
       return { sampleSize: recent.status === 'fulfilled' ? recent.value?.items?.length || 0 : 0,
         periods: summarizeRecent(recent.status === 'fulfilled' ? recent.value?.items : [], now),
         recentAvailability: recent.status === 'fulfilled' ? 'ready' : recent.reason?.code || 'temporarily_unavailable',
-        exactMinutesAvailability: 'extended_history_required', top, checkedAt: now };
+        exactMinutesAvailability: 'not_provided_by_spotify_api', top, checkedAt: now };
     });
-    const measured = await measuredSnapshot();
     res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=30');
-    return res.status(200).json({...data, measured});
+    return res.status(200).json(data);
   } catch (error) { return sendFailure(res, error); }
 }
