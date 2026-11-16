@@ -403,13 +403,19 @@ async function findVideo(content) {
   if (!id) return null;
   if (!videoMatches.has(id) || videoMatches.get(id).expires <= Date.now()) {
     const entry = { expires: Infinity };
-    entry.task = getJson('/api/video?track=' + encodeURIComponent(id), 25000).catch(() => ({ videoId: null, reason: 'unavailable' })).then(result => {
-      entry.expires = Date.now() + (result.videoId ? 86400000 : 60000);
+    entry.task = getJson('/api/video?track=' + encodeURIComponent(id), 25000).catch(error => ({ videoId: null, reason: error.code || 'unavailable', retryAfter: error.retryAfter })).then(result => {
+      entry.expires = Date.now() + (result.videoId ? 86400000 : Math.max(60000, (result.retryAfter || 0) * 1000));
       return result;
     });
     videoMatches.set(id, entry);
   }
   return videoMatches.get(id).task;
+}
+function youtubeUnavailableMessage(reason) {
+  if (reason === 'youtube_quota_exceeded') return 'A busca do YouTube atingiu o limite de uso. Isso não significa que a música não existe lá. Usa o Spotify enquanto a busca se recupera.';
+  if (['quota_exceeded', 'rate_limited'].includes(reason)) return 'O Spotify limitou a consulta desta faixa. O YouTube continua disponível, mas não consegui confirmar a música agora.';
+  if (['search_unavailable', 'search_not_configured', 'unavailable', 'temporarily_unavailable'].includes(reason)) return 'A busca do YouTube está indisponível agora. Tenta mais tarde ou escolhe o Spotify.';
+  return 'Ainda não encontrei uma versão compatível desta faixa no YouTube. Escolha outra música ou use o Spotify.';
 }
 async function selectContent(content, { follow = false, play = true, automatic = false } = {}) {
   if (!/^spotify:(track|episode|playlist):[A-Za-z0-9]{22}$/.test(content?.uri || '')) return;
@@ -441,7 +447,7 @@ async function selectContent(content, { follow = false, play = true, automatic =
     state.loadedUri = content.uri; youtubeVideo = match.videoId;
 
     ensureYouTube();
-  } else if (state.preferred === 'youtube') unavailableYouTube(content.uri.startsWith('spotify:playlist:') ? 'Esta playlist abre no Spotify. Para ouvir pelo YouTube, escolha uma faixa da lista de recentes.' : 'Ainda não encontrei esta faixa no YouTube. Escolha outra música ou use o Spotify.');
+  } else if (state.preferred === 'youtube') unavailableYouTube(content.uri.startsWith('spotify:playlist:') ? 'Esta playlist abre no Spotify. Para ouvir pelo YouTube, escolha uma faixa da lista de recentes.' : youtubeUnavailableMessage(match?.reason));
   else useSpotify(content, play);
   if (!automatic) {
 
@@ -561,13 +567,19 @@ function renderRecent() {
   $('more-recent').hidden = items.length <= state.recentLimit;
 }
 function renderLibrary(data) {
+  if (state.library) {
+    data = { ...data, availability: { ...data.availability } };
+    for (const key of ['playlists', 'recent']) if (!['ready', 'stale'].includes(data.availability[key]) && state.library[key]?.length) {
+      data[key] = state.library[key]; data.availability[key] = 'stale';
+    }
+  }
   state.library = data;
   $('profile-name').replaceChildren(document.createTextNode(data.profile.name + ' '), el('span', 'handle', data.profile.name.toLowerCase() === 'ogg' ? '/ Daniel Victor' : '/ ogg'));
   $('profile-link').href = safeUrl(data.profile.url) || 'https://open.spotify.com/';
   if (safeUrl(data.profile.image, true)) $('profile-image').src = data.profile.image;
   $('profile-image').alt = `Perfil de ${data.profile.name}`;
-  $('playlist-count').textContent = data.availability?.playlists === 'ready' ? String(data.playlists.length) : '—';
-  $('playlists-note').textContent = data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Playlists públicas que eu criei. Abre no Spotify e salva a tua favorita.';
+  $('playlist-count').textContent = ['ready', 'stale'].includes(data.availability?.playlists) ? String(data.playlists.length) : '—';
+  $('playlists-note').textContent = data.availability?.playlists === 'stale' ? 'Última atualização disponível. O Spotify limitou as consultas; as playlists serão atualizadas quando liberar.' : data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Playlists públicas que eu criei. Abre no Spotify e salva a tua favorita.';
   renderPlaylists(); renderRecent();
 }
 $('playlist-search').addEventListener('input', () => { state.playlistLimit = 8; renderPlaylists(); });
@@ -577,7 +589,8 @@ $('more-recent').addEventListener('click', () => { state.recentLimit += 10; rend
 async function getJson(url, timeout = 12000, options = {}) {
   const response = await fetch(url, { ...options, signal: AbortSignal.timeout(timeout) });
   if (!response.ok) {
-    const error = new Error('unavailable'); error.retryAfter = Math.min(300, Number(response.headers.get('Retry-After')) || 0); throw error;
+    let body; try { body = await response.json(); } catch {}
+    const error = new Error('unavailable'); error.code = body?.error; error.retryAfter = Math.max(0, Number(response.headers.get('Retry-After')) || body?.retryAfter || 0); throw error;
   }
   return response.json();
 }
@@ -593,15 +606,22 @@ async function pollNow() {
   } finally { pollTimer = setTimeout(pollNow, state.retryMs); }
 }
 function renderStats(data) {
+  if (listeningStats) {
+    data = { ...data };
+    if (!['ready', 'stale'].includes(data.top?.availability) && listeningStats.top?.tracks?.length) data.top = { ...listeningStats.top, availability: 'stale' };
+    if (!['ready', 'stale'].includes(data.recentAvailability) && listeningStats.sampleSize) {
+      data.periods = listeningStats.periods; data.sampleSize = listeningStats.sampleSize; data.recentAvailability = 'stale';
+    }
+  }
   listeningStats = data;
   const period = data.periods?.find(item => item.days === statsPeriod);
   const format = value => Number(value || 0).toLocaleString('pt-BR');
   $('stats-week').setAttribute('aria-pressed', String(statsPeriod === 7));
   $('stats-month').setAttribute('aria-pressed', String(statsPeriod === 30));
-  const official = statsPeriod === 30 && data.top?.availability === 'ready';
+  const official = statsPeriod === 30 && ['ready', 'stale'].includes(data.top?.availability);
   $('stats-metrics').hidden = official;
-  $('stats-plays').textContent = data.recentAvailability === 'ready' ? format(period?.plays) : '—';
-  $('stats-track-count').textContent = data.recentAvailability === 'ready' && Number.isInteger(period?.trackCount) ? format(period.trackCount) : '—';
+  $('stats-plays').textContent = ['ready', 'stale'].includes(data.recentAvailability) ? format(period?.plays) : '—';
+  $('stats-track-count').textContent = ['ready', 'stale'].includes(data.recentAvailability) && Number.isInteger(period?.trackCount) ? format(period.trackCount) : '—';
   $('stats-plays-status').textContent = 'Até ' + (data.sampleSize || 50) + ' registros disponíveis';
   $('stats-context').textContent = official ? 'Ranking oficial do Spotify · últimas 4 semanas.' : 'Últimos ' + statsPeriod + ' dias · ranking do recorte recente.';
   $('stats-disclosure').textContent = official ? 'Artistas e músicas mais ouvidos segundo o Spotify, atualizados automaticamente.' : 'Contagens dentro das últimas ' + (data.sampleSize || 50) + ' reproduções disponíveis. Esse recorte pode não cobrir o período inteiro.';
@@ -623,17 +643,20 @@ function renderStats(data) {
       if (!official) row.append(el('span', 'stats-rank-count', String(item.count) + '×'));
       list.append(row);
     });
-    if (!entries.length) list.append(el('li', 'stats-empty', 'Sem registros neste recorte.'));
+    if (!entries.length) list.append(el('li', 'stats-empty', (statsPeriod === 30 ? data.top?.availability : data.recentAvailability) === 'ready' ? 'Sem registros neste recorte.' : 'O Spotify não liberou estes dados agora. Tentarei atualizar automaticamente.'));
   }
+  if ((official ? data.top?.availability : data.recentAvailability) === 'stale') $('stats-context').textContent += ' Exibindo a última atualização disponível.';
+  else if (!(official || ['ready', 'stale'].includes(data.recentAvailability))) $('stats-context').textContent = 'Estatísticas temporariamente indisponíveis no Spotify. Isso não significa que tu ouviu zero músicas.';
   $('stats-footnote').textContent = (official ? '' : 'Base do ranking: últimas 50 reproduções. Não cobre necessariamente o período inteiro. ') + 'O total de minutos ouvidos mostrado no aplicativo não é disponibilizado pela conexão oficial do Spotify.';
 }
 $('stats-week').addEventListener('click', () => { statsPeriod = 7; if (listeningStats) renderStats(listeningStats); });
 $('stats-month').addEventListener('click', () => { statsPeriod = 30; if (listeningStats) renderStats(listeningStats); });
 async function pollStats() {
   clearTimeout(statsTimer); if (document.hidden) return;
-  try { renderStats(await getJson('/api/estatisticas')); }
-  catch { $('stats-context').textContent = 'Os números estão indisponíveis agora. O som continua.'; }
-  finally { statsTimer = setTimeout(pollStats, 60000); }
+  let retry = 300000;
+  try { const data = await getJson('/api/estatisticas'); retry = Math.max(retry, (data.retryAfter || 0) * 1000); renderStats(data); }
+  catch (error) { retry = Math.max(retry, error.retryAfter * 1000); $('stats-context').textContent = 'Os números estão indisponíveis agora. O som continua.'; }
+  finally { statsTimer = setTimeout(pollStats, Math.min(retry, 2147483647)); }
 }
 function renderPresence(items) {
   presenceItems = items || [];
@@ -668,11 +691,12 @@ async function pollPresence() {
       if (image) $('presence-user-image').src = image;
     }
   }
-  if (jobs[0].status === 'fulfilled') {
+  if (jobs[0].status === 'fulfilled' && jobs[0].value.availability === 'ready') {
     renderPresence(jobs[0].value.items);
   }
   const code = new URLSearchParams(location.search || '').get('presenca');
   const messages = {
+    'spotify-limite':'O Spotify atingiu o limite de consultas do app e pausou novos logins. Tenta de novo depois que liberar. Tua conta não foi rejeitada.',
     'perfil-recusado':'O Spotify recusou o acesso ao perfil usado neste login. Confere a conta na próxima tela. Se for a conta certa, ela precisa ter acesso liberado a este site.',
     'conta-nao-liberada':'O Spotify recusou o acesso ao perfil usado neste login. Confere a conta na próxima tela. Se for a conta certa, ela precisa ter acesso liberado a este site.',
     'conexao-expirada':'O login expirou ou voltou para outro navegador. Começa de novo por aqui e termina o login neste mesmo navegador.',
@@ -681,6 +705,11 @@ async function pollPresence() {
     'conexao-negada':'Não consegui confirmar o perfil no Spotify. Confere a conta e autoriza de novo.',
     'indisponivel':'O Spotify não respondeu agora. Tenta entrar novamente em instantes.'
   };
+  const waitSeconds = Number(new URLSearchParams(location.search || '').get('aguarde'));
+  if (code === 'spotify-limite' && waitSeconds > 0 && waitSeconds < 604800) {
+    const when = new Date(Date.now() + waitSeconds * 1000).toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' });
+    messages['spotify-limite'] += ' Próxima tentativa indicada pelo Spotify: ' + when + '.';
+  }
   const signedIn = Boolean(presenceSession?.profile);
   $('presence-login-help').hidden = signedIn || !code;
   $('presence-login-label').textContent = code && !signedIn ? 'Conferir conta no Spotify' : 'Entrar com Spotify';
@@ -692,7 +721,7 @@ async function pollPresence() {
   // Consume callback feedback once. A restored Chrome/iOS page must not replay
   // an old denial after a newer, valid session has already been confirmed.
   if (accountReady && code && typeof history !== 'undefined' && typeof location.href === 'string') {
-    const url = new URL(location.href); url.searchParams.delete('presenca');
+    const url = new URL(location.href); url.searchParams.delete('presenca'); url.searchParams.delete('aguarde');
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
   }
 }
@@ -717,9 +746,10 @@ $('presence-logout').addEventListener('click', () => presenceAction('sair'));
 window.addEventListener('pageshow', event => { if (event.persisted) return pollPresence(); });
 async function pollLibrary() {
   clearTimeout(libraryTimer); if (document.hidden) return;
-  try { renderLibrary(await getJson('/api/biblioteca')); }
-  catch { if (!state.library) { renderPlaylists(); renderRecent(); } }
-  finally { libraryTimer = setTimeout(pollLibrary, 60000); }
+  let retry = 300000;
+  try { const data = await getJson('/api/biblioteca'); retry = Math.max(retry, (data.retryAfter || 0) * 1000); renderLibrary(data); }
+  catch (error) { retry = Math.max(retry, error.retryAfter * 1000); if (!state.library) { renderPlaylists(); renderRecent(); } $('playlists-note').textContent = ['rate_limited', 'quota_exceeded'].includes(error.code) ? 'O Spotify limitou as consultas. As playlists voltam quando ele liberar; teu perfil continua no link acima.' : 'Não consegui atualizar as playlists agora.'; }
+  finally { libraryTimer = setTimeout(pollLibrary, Math.min(retry, 2147483647)); }
 }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {

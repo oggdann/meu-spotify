@@ -66,3 +66,8 @@ test('declining permission is distinguished from expired state and never exchang
   const r=response();await presenceCallback({url:'/api/retorno?error=access_denied&state='+s.state,headers:{cookie:s.cookie}},r);
   assert.equal(calls,0);assert.match(r.url,/permissao-recusada/);
 });
+test('profile quota exhaustion returns a distinct retry result without creating a session',async()=>{
+  const s=await start();let calls=0;globalThis.fetch=async()=>++calls===1?json({access_token:'guest'}):new Response(JSON.stringify({error:{reason:'QUOTA_EXCEEDED'}}),{status:429,headers:{'Retry-After':'7200'}});
+  const r=response();await presenceCallback({url:'/api/retorno?code=code&state='+s.state,headers:{cookie:s.cookie}},r);
+  assert.match(r.url,/presenca=spotify-limite&aguarde=7200/);assert.equal(typeof r.headers['Set-Cookie'],'string');
+});

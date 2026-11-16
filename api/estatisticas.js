@@ -1,4 +1,4 @@
-import { cached, getToken, imageUrl, publicTrack, readOnly, sendFailure, spotifyGet, spotifyUrl } from '../lib/spotify.js';
+import { cacheInfo, cached, getToken, imageUrl, publicTrack, readOnly, sendFailure, spotifyGet, spotifyUrl } from '../lib/spotify.js';
 
 export function summarizeRecent(items, now = Date.now()) {
   const unique = new Map();
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
       const recent = jobs[0];
       const topReady = jobs[1].status === 'fulfilled' && jobs[2].status === 'fulfilled';
       const top = {
-        availability: topReady ? 'ready' : (jobs.find(job => job.status === 'rejected')?.reason?.code || 'temporarily_unavailable'),
+        availability: topReady ? (jobs.slice(1).some(job => cacheInfo(job.value).stale) ? 'stale' : 'ready') : (jobs.slice(1).find(job => job.status === 'rejected')?.reason?.code || 'temporarily_unavailable'),
         period: 'last_four_weeks',
         artists: topReady ? (jobs[1].value?.items || []).filter(item => /^[A-Za-z0-9]{22}$/.test(item.id || '')).map(item => ({ id: item.id, name: String(item.name || 'Artista'), image: imageUrl(item.images?.[0]?.url), url: spotifyUrl(item.external_urls?.spotify) })) : [],
         tracks: topReady ? (jobs[2].value?.items || []).map(publicTrack).filter(Boolean) : []
@@ -47,10 +47,11 @@ export default async function handler(req, res) {
       const now = Date.now();
       return { sampleSize: recent.status === 'fulfilled' ? recent.value?.items?.length || 0 : 0,
         periods: summarizeRecent(recent.status === 'fulfilled' ? recent.value?.items : [], now),
-        recentAvailability: recent.status === 'fulfilled' ? 'ready' : recent.reason?.code || 'temporarily_unavailable',
+        recentAvailability: recent.status === 'fulfilled' ? (cacheInfo(recent.value).stale ? 'stale' : 'ready') : recent.reason?.code || 'temporarily_unavailable',
+        retryAfter: Math.max(...jobs.map(job => job.reason?.retryAfter || cacheInfo(job.value).retryAfter || 0)),
         exactMinutesAvailability: 'not_provided_by_spotify_api', top, checkedAt: now };
     });
-    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=30');
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
     return res.status(200).json(data);
   } catch (error) { return sendFailure(res, error); }
 }

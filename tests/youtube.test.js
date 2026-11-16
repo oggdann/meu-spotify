@@ -110,3 +110,12 @@ test('a medley search can use its distinctive main title without requiring every
   assert.equal(chooseVideo(song,[video]),video.id);
   assert.equal(chooseVideo(song,[{...video,snippet:{title:'QUEBRA DELA BEBEL 2.0 - BIBI PERIGOSA',channelTitle:'Bibi Perigosa'}}]),null);
 });
+test('regional Melo titles can match the same recording without the optional prefix',()=>{
+  const song={...track,title:'Melô a vida tá demais',primaryArtist:'Deson Melo',durationMs:104000};
+  const video={id:'aaaaaaaaaaa',snippet:{title:'A vida tá demais - Deson Melo',channelTitle:'Deson Melo - Topic'},contentDetails:{duration:'PT1M44S'},status:{embeddable:true,privacyStatus:'public'}};
+  assert.ok(videoSearchQueries(song).includes('a vida ta demais deson melo'));assert.equal(chooseVideo(song,[video]),video.id);
+});
+test('YouTube quota exhaustion is distinct from a missing recording',()=>{
+  const r=scenario("process.env.YOUTUBE_API_KEY='key';globalThis.fetch=async()=>{calls.push('request');return json({error:{errors:[{reason:'quotaExceeded'}]}},403)};const {resolveVideo}=await import('./lib/youtube.js');const song="+JSON.stringify(beijo)+";const a=await resolveVideo(song),b=await resolveVideo(song);console.log(JSON.stringify({a,b,count:calls.length}));");
+  assert.equal(r.count,1);assert.equal(r.a.reason,'youtube_quota_exceeded');assert.equal(r.b.reason,'youtube_quota_exceeded');
+});

@@ -70,3 +70,11 @@ test('a failed playlist lookup leaves the current song working',()=>{
   const r=scenario("globalThis.fetch=async(url)=>url.includes('/api/token')?json({access_token:'access',expires_in:3600}):url.includes('/playlists/')?json({error:'unavailable'},503):json({is_playing:true,item:track,context:{type:'playlist',uri:'spotify:playlist:2222222222222222222222'}});const {default:h}=await import('./api/musica.js');const r=response();await h({method:'GET'},r);console.log(JSON.stringify(r));");
   assert.equal(r.code,200);assert.equal(r.body.playlist,null);assert.equal(r.body.title,'Test song');
 });
+test('quota exhaustion preserves the full provider wait and suppresses queries with different limits',()=>{
+  const r=scenario(`globalThis.fetch=async(url)=>{calls.push(url);return url.includes('/api/token')?json({access_token:'test',expires_in:3600}):json({error:{reason:'QUOTA_EXCEEDED'}},429,{'Retry-After':'7200'})};const {spotifyGet}=await import('./lib/spotify.js');const errors=[];for(const path of ['/me/player/recently-played?limit=50','/me/player/recently-played?limit=30']){try{await spotifyGet(path)}catch(e){errors.push({code:e.code,wait:e.retryAfter})}}console.log(JSON.stringify({errors,count:calls.length}));`);
+  assert.equal(r.count,2);assert.ok(r.errors.every(e=>e.code==='quota_exceeded'&&e.wait===7200));
+});
+test('a previous snapshot survives temporary quota failure and is labelled stale',()=>{
+  const r=scenario(`let clock=1000;Date.now=()=>clock;let limited=false;globalThis.fetch=async(url)=>url.includes('/api/token')?json({access_token:'test',expires_in:3600}):limited?json({error:{reason:'QUOTA_EXCEEDED'}},429,{'Retry-After':'7200'}):json({items:[{id:'saved'}]});const {spotifyGet}=await import('./lib/spotify.js');await spotifyGet('/me/top/tracks');clock+=7200001;limited=true;const data=await spotifyGet('/me/top/tracks');console.log(JSON.stringify(data));`);
+  assert.equal(r.items[0].id,'saved');assert.equal(r.__oggCache.stale,true);assert.equal(r.__oggCache.reason,'quota_exceeded');
+});

@@ -10,3 +10,7 @@ test('presence store deduplicates users, throttles repeated marks and limits the
   assert.equal(writes,1);assert.equal((await store.presences()).length,1);
   await store.removePresence('guest');assert.equal((await store.presences()).length,0);
 });
+test('a failed profile read is not cached as an empty wall',async()=>{
+  let writes=0;const store=createSiteStore({now:()=>now,cache:{get:async()=>null,set:async()=>{writes++}},listing:async()=>[{pathname:'presence/one.json'}],read:async()=>{throw Error('temporary storage failure')}});
+  await assert.rejects(store.presences(),/temporary storage failure/);assert.equal(writes,0);
+});
