@@ -90,7 +90,8 @@
   <aside class="player-dock" id="player-dock" aria-label="Player de música" hidden>
     <div class="dock-top"><div class="dock-heading"><svg><use href="#i-sound"/></svg><span id="player-context">OUVINDO COM OGG</span><span class="dock-state" id="player-state">Preparando player…</span></div><label class="follow-switch"><input type="checkbox" id="follow" checked><span class="switch-track"></span><span>Acompanhar trocas</span></label><button class="round-btn collapse-btn" id="collapse-player" aria-label="Recolher player" aria-expanded="true">⌄</button></div>
     <div class="player-options"><label for="player-source">Ouvir por</label><select id="player-source"><option value="auto">Automático</option><option value="youtube">YouTube</option><option value="spotify">Spotify</option></select><span id="provider-label">Procurando a mesma faixa…</span></div>
-    <div class="dock-body" id="dock-body"><div id="spotify-player"><div id="spotify-embed"></div></div><div id="youtube-player" hidden><div id="youtube-embed"></div></div><p class="player-disclaimer" id="player-disclaimer">YouTube para ouvir sem conta do Spotify, quando a mesma faixa estiver disponível.</p></div>
+    <p class="selected-track" id="selected-track"></p>
+    <div class="dock-body" id="dock-body"><div id="spotify-player"><div id="spotify-embed"></div></div><div id="youtube-player" hidden><div id="youtube-embed"></div></div><div class="player-unavailable" id="player-unavailable" hidden><p id="player-unavailable-note" role="status"></p><button class="outline-btn" id="use-spotify">Escolher Spotify</button></div><p class="player-disclaimer" id="player-disclaimer">YouTube para ouvir sem conta do Spotify, quando a mesma faixa estiver disponível.</p></div>
   </aside>
   <div class="toast" id="toast" role="status" hidden></div>
 </body>

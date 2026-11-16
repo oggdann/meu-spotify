@@ -1,6 +1,6 @@
 /* OGG / personal frequency. Owner credentials never leave the server. */
 const $ = id => document.getElementById(id);
-const state = { now: null, library: null, controller: null, spotifyController: null, spotifyReady: false, spotifyUri: null, provider: 'spotify', preferred: 'auto', api: null, loadedUri: null, selected: null, follow: true, wantsAudio: true, audible: false, ready: false, pendingPlay: false, playlistLimit: 8, recentLimit: 8, retryMs: 8000, failures: 0 };
+const state = { now: null, library: null, controller: null, spotifyController: null, spotifyReady: false, spotifyUri: null, provider: 'spotify', preferred: 'auto', transitioning: false, unavailable: false, api: null, loadedUri: null, selected: null, follow: true, wantsAudio: true, audible: false, ready: false, pendingPlay: false, playlistLimit: 8, recentLimit: 8, retryMs: 8000, failures: 0 };
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const iconNS = 'http://www.w3.org/2000/svg';
 let pollTimer, libraryTimer, autoplayTimer, videoBufferTimer, toastTimer, iframeLoading = false, spotifyCreating = false;
@@ -76,7 +76,7 @@ function updateButton() {
   $('listen').disabled = !canFollow;
   const playingLive = state.audible && state.follow && state.loadedUri === state.now?.uri;
   $('listen-icon').setAttribute('href', playingLive ? '#i-pause' : '#i-play');
-  $('listen-label').textContent = playingLive ? 'Pausar som' : (state.follow ? (state.ready && state.wantsAudio ? 'Ativar som' : 'Ouvir junto') : 'Voltar ao som do OGG');
+  $('listen-label').textContent = playingLive ? 'Pausar som' : (state.follow ? (state.unavailable ? 'Escolher player' : state.transitioning ? 'Preparando som…' : state.ready && state.wantsAudio ? 'Ativar som' : 'Ouvir junto') : 'Voltar ao som do OGG');
   document.body.classList.toggle('is-audible', state.audible);
 }
 function renderNow(data) {
@@ -122,24 +122,25 @@ function ensureIframe() {
 }
 window.onSpotifyIframeApiReady = api => { state.api = api; createController(); };
 function createController() {
-  if (state.spotifyController || spotifyCreating || !state.selected || !state.api || state.provider !== 'spotify') return;
+  if (state.spotifyController || spotifyCreating || !state.selected || !state.api || state.provider !== 'spotify' || state.transitioning || state.unavailable) return;
   spotifyCreating = true;
   const initialUri = state.selected.uri;
   state.api.createController($('spotify-embed'), { uri: initialUri, width: '100%', height: 152 }, controller => {
     state.spotifyController = controller; state.spotifyUri = initialUri;
-    if (state.provider === 'spotify') { state.controller = controller; state.loadedUri = initialUri; }
+    if (state.provider === 'spotify' && !state.transitioning && !state.unavailable) { state.controller = controller; state.loadedUri = initialUri; }
     controller.addListener('ready', () => {
       state.spotifyReady = true;
-      if (state.provider !== 'spotify') { controller.pause(); return; }
+      if (state.provider !== 'spotify' || state.controller !== controller || state.transitioning || state.unavailable) { controller.pause(); return; }
       state.ready = true;
       if (state.selected?.uri !== state.spotifyUri) useSpotify(state.selected, state.wantsAudio);
       else if (state.pendingPlay && state.wantsAudio) attemptPlay();
       updateButton();
     });
-    controller.addListener('playback_started', () => { if (state.provider !== 'spotify') { controller.pause(); return; } clearTimeout(autoplayTimer); state.audible = true; $('player-state').textContent = 'Som ligado'; $('audio-note').textContent = state.follow ? 'Mesma faixa. Acompanhando as próximas trocas do OGG.' : 'Curtindo uma faixa da coleção.'; updateButton(); });
+    controller.addListener('playback_started', () => { if (state.provider !== 'spotify' || state.controller !== controller || state.transitioning || state.unavailable) { controller.pause(); return; } clearTimeout(autoplayTimer); state.audible = true; $('player-state').textContent = 'Som ligado'; $('audio-note').textContent = state.follow ? 'Mesma faixa. Acompanhando as próximas trocas do OGG.' : 'Curtindo uma faixa da coleção.'; updateButton(); });
     controller.addListener('playback_update', event => {
-      if (state.provider !== 'spotify') return;
+      if (state.provider !== 'spotify' || state.controller !== controller || state.transitioning || state.unavailable) return;
       const playback = event.data; if (!playback) return;
+      if (state.audible && playback.isPaused && !playback.isBuffering) state.wantsAudio = false;
       state.audible = !playback.isPaused && !playback.isBuffering;
       if (state.audible) { clearTimeout(autoplayTimer); $('player-state').textContent = 'Som ligado'; }
       else if (playback.isBuffering) $('player-state').textContent = 'Carregando som…';
@@ -149,6 +150,7 @@ function createController() {
   });
 }
 function attemptPlay() {
+  if (state.transitioning || state.unavailable || !state.wantsAudio) return;
   state.pendingPlay = true;
   if (!state.controller || !state.ready) return;
   state.pendingPlay = false;
@@ -161,10 +163,14 @@ function attemptPlay() {
     updateButton();
   }, 3500);
 }
-function showProvider(provider) {
+function detachController() {
   const old = state.controller;
-  state.provider = provider; state.audible = false; state.ready = false;
+  state.controller = null; state.audible = false; state.ready = false; state.loadedUri = null;
   old?.pause(); clearTimeout(autoplayTimer); clearTimeout(videoBufferTimer);
+}
+function showProvider(provider) {
+  detachController(); state.provider = provider; state.unavailable = false;
+  $('player-unavailable').hidden = true;
   $('spotify-player').hidden = provider !== 'spotify'; $('youtube-player').hidden = provider !== 'youtube';
   $('player-dock').classList.toggle('youtube-active', provider === 'youtube');
   document.body.classList.toggle('has-youtube', provider === 'youtube');
@@ -172,6 +178,7 @@ function showProvider(provider) {
   $('player-disclaimer').textContent = provider === 'youtube' ? 'Reprodução pelo YouTube. A disponibilidade varia por faixa e região; o navegador pode pedir um toque para liberar o som.' : 'Reprodução pelo Spotify. Faixa completa ou prévia conforme a tua sessão.';
 }
 function useSpotify(content, play, note = '') {
+  state.transitioning = false; state.unavailable = false; $('player-unavailable').hidden = true;
   if (state.provider !== 'spotify') showProvider('spotify');
   state.controller = state.spotifyController; state.ready = state.spotifyReady; state.loadedUri = content.uri;
   if (note) $('audio-note').textContent = note;
@@ -196,14 +203,28 @@ function ensureYouTube() {
   document.body.append(script);
 }
 window.onYouTubeIframeAPIReady = () => { youtubeReady = true; startYouTube(); };
+function unavailableYouTube(message) {
+  state.transitioning = false;
+  showProvider('youtube');
+  state.unavailable = true; state.pendingPlay = false;
+  $('youtube-player').hidden = true; $('spotify-player').hidden = true;
+  $('player-unavailable').hidden = false; $('player-unavailable-note').textContent = message;
+  $('provider-label').textContent = 'YouTube · indisponível para esta faixa';
+  $('player-state').textContent = 'Escolha outro player'; $('audio-note').textContent = message;
+  $('player-disclaimer').textContent = 'O Spotify continua disponível como outra opção de reprodução.';
+  $('player-dock').classList.remove('collapsed'); $('collapse-player').setAttribute('aria-expanded', 'true');
+  document.body.classList.remove('has-youtube');
+  updateButton();
+}
 function youtubeFailure() {
-  if (state.provider !== 'youtube' || !state.selected) return;
+  if (state.provider !== 'youtube' || !state.selected || state.transitioning || state.unavailable) return;
   const content = state.selected;
   $('player-state').textContent = 'YouTube indisponível';
-  useSpotify(content, state.wantsAudio, 'Essa versão não abriu no YouTube. O Spotify está disponível como alternativa.');
+  if (state.preferred === 'auto') useSpotify(content, state.wantsAudio, 'Essa versão não abriu no YouTube. O modo Automático tentou o Spotify.');
+  else unavailableYouTube('O YouTube não conseguiu abrir esta faixa. Você pode tentar outra música ou escolher Spotify.');
 }
 function youtubeState(event) {
-  if (state.provider !== 'youtube') return;
+  if (state.provider !== 'youtube' || state.controller !== youtubeAdapter || state.transitioning || state.unavailable) return;
   clearTimeout(videoBufferTimer);
   if (event.data === 1) {
     youtubeStarted = true; state.audible = true; state.wantsAudio = true; clearTimeout(autoplayTimer);
@@ -224,17 +245,17 @@ function youtubeState(event) {
   updateButton();
 }
 function startYouTube() {
-  if (!youtubeReady || state.provider !== 'youtube' || !youtubeVideo) return;
+  if (!youtubeReady || state.provider !== 'youtube' || !youtubeVideo || state.transitioning || state.unavailable) return;
   if (!youtubePlayer) {
     const initialVideo = youtubeVideo;
-    youtubeAdapter = { play: () => { youtubePlayer?.playVideo(); }, pause: () => { youtubePlayer?.pauseVideo(); } };
+    youtubeAdapter = { play: () => { youtubePlayer?.playVideo?.(); }, pause: () => { youtubePlayer?.pauseVideo?.(); } };
     state.controller = youtubeAdapter;
     youtubePlayer = new YT.Player('youtube-embed', { host: 'https://www.youtube-nocookie.com', width: '100%', height: '270', videoId: youtubeVideo,
       playerVars: { autoplay: state.wantsAudio ? 1 : 0, controls: 1, playsinline: 1, rel: 0, origin: location.origin },
       events: {
         onReady: () => {
           youtubePlayerReady = true;
-          if (state.provider !== 'youtube') { youtubePlayer.pauseVideo(); return; }
+          if (state.provider !== 'youtube' || state.controller !== youtubeAdapter || state.transitioning || state.unavailable) { youtubePlayer.pauseVideo(); return; }
           state.ready = true;
           if (youtubeVideo !== initialVideo) {
             if (state.pendingPlay && state.wantsAudio) youtubePlayer.loadVideoById(youtubeVideo);
@@ -245,7 +266,7 @@ function startYouTube() {
         },
         onStateChange: youtubeState,
         onError: youtubeFailure,
-        onAutoplayBlocked: () => { if (state.provider !== 'youtube') return; $('player-state').textContent = 'Ativar som'; $('audio-note').textContent = 'O navegador pediu um toque para liberar o som.'; updateButton(); }
+        onAutoplayBlocked: () => { if (state.provider !== 'youtube' || state.controller !== youtubeAdapter || state.transitioning || state.unavailable) return; $('player-state').textContent = 'Ativar som'; $('audio-note').textContent = 'O navegador pediu um toque para liberar o som.'; updateButton(); }
       }
     });
   } else {
@@ -270,23 +291,30 @@ async function findVideo(content) {
 }
 async function selectContent(content, { follow = false, play = true, automatic = false } = {}) {
   if (!/^spotify:(track|episode|playlist):[A-Za-z0-9]{22}$/.test(content?.uri || '')) return;
-  if (state.selected?.uri !== content.uri) { state.audible = false; state.controller?.pause(); }
+  // Detach before pausing so late iframe events cannot change the new intent.
+  detachController(); state.transitioning = true; state.unavailable = false;
+  $('player-unavailable').hidden = true;
   state.selected = content; state.follow = follow; $('follow').checked = follow;
   if (!automatic) state.wantsAudio = play;
   state.pendingPlay = play;
   const requestId = ++selectionId;
   $('player-dock').hidden = false; document.body.classList.add('has-player');
   $('player-context').textContent = follow ? 'OUVINDO COM OGG' : 'NA MINHA COLEÇÃO';
+  $('selected-track').textContent = `NO PLAYER: ${content.title || 'Playlist'}${content.artist ? ` · ${content.artist}` : ''}`;
+  $('player-state').textContent = 'Preparando som…'; $('provider-label').textContent = 'Conferindo a faixa…';
+  updateButton();
   let match = null;
   if (state.preferred !== 'spotify' && content.uri.startsWith('spotify:track:')) match = await findVideo(content);
   if (requestId !== selectionId) return;
+  state.transitioning = false;
   if (/^[\w-]{11}$/.test(match?.videoId || '')) {
-    if (state.provider !== 'youtube') showProvider('youtube');
+    showProvider('youtube');
     state.loadedUri = content.uri; youtubeVideo = match.videoId;
     $('player-dock').classList.remove('collapsed'); $('collapse-player').setAttribute('aria-expanded', 'true');
     $('collapse-player').setAttribute('aria-label', 'Recolher player e pausar vídeo');
     ensureYouTube();
-  } else useSpotify(content, play, state.preferred === 'youtube' ? 'Ainda não encontrei a mesma faixa no YouTube. O Spotify está disponível.' : '');
+  } else if (state.preferred === 'youtube') unavailableYouTube(content.uri.startsWith('spotify:playlist:') ? 'Esta playlist abre no Spotify. Para ouvir pelo YouTube, escolha uma faixa da lista de recentes.' : 'Ainda não encontrei esta faixa no YouTube. Escolha outra música ou use o Spotify.');
+  else useSpotify(content, play);
   if (!automatic) {
     $('player-dock').classList.remove('collapsed'); $('collapse-player').setAttribute('aria-expanded', 'true');
     $('collapse-player').setAttribute('aria-label', 'Recolher player');
@@ -295,21 +323,26 @@ async function selectContent(content, { follow = false, play = true, automatic =
   updateButton();
 }
 $('listen').addEventListener('click', () => {
+  if (state.unavailable && state.follow) { $('player-source').focus(); toast('Escolha Spotify ou outra faixa disponível no YouTube.'); return; }
   if (state.audible && state.follow && state.loadedUri === state.now?.uri) {
     state.wantsAudio = false; state.pendingPlay = false; clearTimeout(autoplayTimer); state.controller?.pause(); state.audible = false;
     $('audio-note').textContent = 'Som pausado por aqui. O Spotify do OGG continua normalmente.'; updateButton(); return;
   }
-  if (state.now?.hasTrack) { state.wantsAudio = true; selectContent({ uri: state.now.uri, title: state.now.title }, { follow: true }); }
+  if (state.now?.hasTrack) { state.wantsAudio = true; selectContent({ uri: state.now.uri, title: state.now.title, artist: state.now.artist }, { follow: true }); }
 });
 $('follow').addEventListener('change', event => {
   state.follow = event.target.checked;
-  if (state.follow && state.now?.hasTrack) selectContent({ uri: state.now.uri, title: state.now.title }, { follow: true, play: state.wantsAudio });
+  if (state.follow && state.now?.hasTrack) selectContent({ uri: state.now.uri, title: state.now.title, artist: state.now.artist }, { follow: true, play: state.wantsAudio });
   else $('player-context').textContent = 'EXPLORANDO MEU SOM';
   updateButton();
 });
 $('player-source').addEventListener('change', event => {
   state.preferred = event.target.value;
   if (state.selected) selectContent(state.selected, { follow: state.follow, play: state.wantsAudio });
+});
+$('use-spotify').addEventListener('click', () => {
+  state.preferred = 'spotify'; $('player-source').value = 'spotify';
+  if (state.selected) selectContent(state.selected, { follow: state.follow, play: true });
 });
 // Real user interaction can unlock audio in browsers that refused autoplay.
 // Never synthesize gestures or restart audio after the visitor paused it.
