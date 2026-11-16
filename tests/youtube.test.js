@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chooseVideo, durationSeconds } from '../lib/youtube.js';
+import { chooseVideo, durationSeconds, videoSearchQuery } from '../lib/youtube.js';
 
 const track = { id:'1234567890123456789012', title:'Helena Beat', artist:'Foster The People', durationMs:276000 };
 const candidate = (id, title, duration='PT4M36S', overrides={}) => ({ id, snippet:{title,channelTitle:'Foster The People',description:'Provided to YouTube by Columbia'}, contentDetails:{duration}, status:{embeddable:true,privacyStatus:'public'}, ...overrides });
@@ -14,6 +14,16 @@ test('matching rejects a cover, changed speed, wrong artist, wrong duration, and
 });
 test('a remix must match the requested version', () => {
   assert.equal(chooseVideo({...track,title:'Helena Beat - Remix'},[candidate('FlBCUzGLce0','Helena Beat')]),null);
+});
+test('search uses the main artist without overconstraining a collaboration', () => {
+  assert.equal(videoSearchQuery({title:'Mega Tropa do Jon',artist:'DJ Petroski, Dj Dudu, Mc Th, Jon Vlogs',primaryArtist:'DJ Petroski'}),'Mega Tropa do Jon DJ Petroski audio');
+  assert.equal(videoSearchQuery({title:'Outra faixa',artist:'Ryu, The Runner, Jovem Dex',primaryArtist:'Ryu, The Runner'}),'Outra faixa Ryu, The Runner audio');
+});
+test('a short collaboration search still validates title, credited artists and duration', () => {
+  const song={title:'Mega Tropa do Jon',artist:'DJ Petroski, Dj Dudu, Mc Th',durationMs:198764};
+  const actual={id:'SUjjJ74lj5A',snippet:{title:'MEGA TROPA DO JON - DJ Dudu, DJ Maninho, DJ Petroski, DJ Bruno Marcos',channelTitle:'Petroski'},contentDetails:{duration:'PT3M23S'},status:{embeddable:true,privacyStatus:'public'}};
+  assert.equal(chooseVideo(song,[actual]),actual.id);
+  assert.equal(chooseVideo(song,[{...actual,snippet:{...actual.snippet,title:'MEGA FUNK SHOW ME LOVE - PETROSKI'}}]),null);
 });
 function scenario(code) {
   const r=spawnSync(process.execPath,['--input-type=module','-e',`
