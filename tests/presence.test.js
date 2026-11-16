@@ -25,6 +25,7 @@ test('visitor login uses PKCE, a signed ten-minute state cookie and the existing
   const s=await start();assert.equal(s.redirect.origin,'https://accounts.spotify.com');
   assert.equal(s.redirect.searchParams.get('redirect_uri'),root+'/api/retorno');
   assert.equal(s.redirect.searchParams.get('code_challenge_method'),'S256');
+  assert.equal(s.redirect.searchParams.get('show_dialog'),'true');
   assert.match(s.state,/^presence\./);assert.ok(s.cookie.startsWith('__Host-ogg-presence-state='));
 });
 test('invalid OAuth state never exchanges a code',async()=>{
@@ -35,11 +36,13 @@ test('invalid OAuth state never exchanges a code',async()=>{
 test('successful guest login never changes owner credentials or automatically publishes a presence',async()=>{
   process.env.SPOTIFY_REFRESH_TOKEN='owner-token-unchanged';
   const s=await login();assert.equal(process.env.SPOTIFY_REFRESH_TOKEN,'owner-token-unchanged');
+  assert.match(s.r.url,/presenca=conectado#presenca$/);
   const h=createPresenceHandler({store:()=>{throw Error('must not publish on login')}}),r=response();
   await h(req('eu',{headers:{cookie:s.cookie}}),r);
   assert.equal(r.body.profile.id,visitor.id);assert.ok(r.body.csrf);
   assert.doesNotMatch(JSON.stringify(r.body)+s.cookie,/guest-access-token|discard-this-refresh|must-not-leak/);
-  assert.equal(r.headers['Cache-Control'],'no-store');
+  assert.match(r.headers['Cache-Control'],/private.*no-store/);
+  assert.equal(r.headers['Pragma'],'no-cache');
 });
 test('presence writes require a real signed session, same origin and CSRF; removal only targets the signed-in user',async()=>{
   const s=await login(), calls=[];
@@ -53,8 +56,13 @@ test('presence writes require a real signed session, same origin and CSRF; remov
   for(const action of ['marcar','remover']){const r=response();await h(req(action,{method:'POST',headers,body:{csrf:me.body.csrf,id:'other'}}),r);assert.equal(r.code,200);}
   assert.equal(calls[0][1].id,visitor.id);assert.equal(calls[0][2],calls[1][1]);assert.match(calls[0][2],/^[a-f0-9]{64}$/);
 });
-test('development-mode denial returns an explanatory result without a visitor session',async()=>{
+test('Spotify profile denial returns its own result without blaming cookies or creating a session',async()=>{
   const s=await start();let calls=0;globalThis.fetch=async()=>++calls===1?json({access_token:'guest'}):json({error:'not allowlisted'},403);
   const r=response();await presenceCallback({url:'/api/retorno?code=code&state='+s.state,headers:{cookie:s.cookie}},r);
-  assert.match(r.url,/conta-nao-liberada/);assert.equal(typeof r.headers['Set-Cookie'],'string');
+  assert.match(r.url,/perfil-recusado/);assert.equal(typeof r.headers['Set-Cookie'],'string');
+});
+test('declining permission is distinguished from expired state and never exchanges a code',async()=>{
+  const s=await start();let calls=0;globalThis.fetch=async()=>{calls++;throw Error('not expected')};
+  const r=response();await presenceCallback({url:'/api/retorno?error=access_denied&state='+s.state,headers:{cookie:s.cookie}},r);
+  assert.equal(calls,0);assert.match(r.url,/permissao-recusada/);
 });

@@ -87,6 +87,7 @@ let paletteSource = null;
 const spectrumBars = [], musicParticles = [];
 let listeningStats = null, statsPeriod = 30;
 let presenceSession = null, presenceItems = [], presenceBusy = false;
+let presenceRefreshId = 0;
 function coverPalette(pixels) {
   const buckets = new Map();
   for (let i = 0; i < pixels.length; i += 4) {
@@ -573,8 +574,8 @@ $('playlist-search').addEventListener('input', () => { state.playlistLimit = 8; 
 $('more-playlists').addEventListener('click', () => { state.playlistLimit += 8; renderPlaylists(); });
 $('more-recent').addEventListener('click', () => { state.recentLimit += 10; renderRecent(); });
 
-async function getJson(url, timeout = 12000) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
+async function getJson(url, timeout = 12000, options = {}) {
+  const response = await fetch(url, { ...options, signal: AbortSignal.timeout(timeout) });
   if (!response.ok) {
     const error = new Error('unavailable'); error.retryAfter = Math.min(300, Number(response.headers.get('Retry-After')) || 0); throw error;
   }
@@ -651,23 +652,53 @@ function renderPresence(items) {
 }
 async function pollPresence() {
   if (document.hidden) return;
-  const jobs = await Promise.allSettled([getJson('/api/presenca?acao=lista'), getJson('/api/presenca?acao=eu')]);
-  if (jobs[1].status === 'fulfilled') {
+  const requestId = ++presenceRefreshId;
+  const jobs = await Promise.allSettled([getJson('/api/presenca?acao=lista', 12000, {cache:'no-store',credentials:'same-origin'}), getJson('/api/presenca?acao=eu', 12000, {cache:'no-store',credentials:'same-origin'})]);
+  if (requestId !== presenceRefreshId) return;
+  const accountReady = jobs[1].status === 'fulfilled';
+  if (accountReady) {
     presenceSession = jobs[1].value;
     const signedIn = Boolean(presenceSession.profile);
     $('presence-login').hidden = signedIn || !presenceSession.enabled;
     $('presence-session').hidden = !signedIn;
-    if (signedIn) $('presence-greeting').textContent = 'Salve, ' + presenceSession.profile.name + '. Teu nome só vai pro mural quando tu marcar.';
+    if (signedIn) {
+      $('presence-greeting').textContent = 'Conta conectada: ' + presenceSession.profile.name;
+      const image = safeUrl(presenceSession.profile.image, true);
+      $('presence-user-image').hidden = !image;
+      if (image) $('presence-user-image').src = image;
+    }
   }
   if (jobs[0].status === 'fulfilled') {
     renderPresence(jobs[0].value.items);
-    if (jobs[0].value.availability !== 'ready') $('presence-feedback').textContent = 'O mural está reconectando. Tenta de novo daqui a pouco.';
   }
   const code = new URLSearchParams(location.search || '').get('presenca');
-  if (code) $('presence-feedback').textContent = code === 'conta-nao-liberada' ? 'O Spotify ainda não liberou tua conta pra este site. Me chama no @oggdann.' : 'A conexão com o Spotify não terminou. Tu pode tentar entrar de novo.';
+  const messages = {
+    'perfil-recusado':'O Spotify recusou o acesso ao perfil usado neste login. Confere a conta na próxima tela. Se for a conta certa, ela precisa ter acesso liberado a este site.',
+    'conta-nao-liberada':'O Spotify recusou o acesso ao perfil usado neste login. Confere a conta na próxima tela. Se for a conta certa, ela precisa ter acesso liberado a este site.',
+    'conexao-expirada':'O login expirou ou voltou para outro navegador. Começa de novo por aqui e termina o login neste mesmo navegador.',
+    'permissao-recusada':'A autorização não foi concluída. Para entrar, confirma a leitura do teu perfil na tela do Spotify.',
+    'conectado':'O Spotify autorizou, mas este navegador não manteve a sessão. Permite os cookies deste site e tenta novamente.',
+    'conexao-negada':'Não consegui confirmar o perfil no Spotify. Confere a conta e autoriza de novo.',
+    'indisponivel':'O Spotify não respondeu agora. Tenta entrar novamente em instantes.'
+  };
+  const signedIn = Boolean(presenceSession?.profile);
+  $('presence-login-help').hidden = signedIn || !code;
+  $('presence-login-label').textContent = code && !signedIn ? 'Conferir conta no Spotify' : 'Entrar com Spotify';
+  if (signedIn) {
+    $('presence-feedback').textContent = presenceItems.some(item => item.id === presenceSession.profile.id) ? 'Tua presença já tá no mural.' : 'Conectou. Agora toca em “Marcar minha presença” para aparecer no mural.';
+  } else if (!accountReady) $('presence-feedback').textContent = 'Não consegui conferir teu login agora. Atualiza a página e tenta novamente.';
+  else $('presence-feedback').textContent = messages[code] || (code ? 'O login não terminou. Confere a conta e tenta novamente.' : '');
+  if (jobs[0].status === 'fulfilled' && jobs[0].value.availability !== 'ready') $('presence-feedback').textContent = 'O mural está reconectando. Teu login pode continuar; tenta marcar a presença daqui a pouco.';
+  // Consume callback feedback once. A restored Chrome/iOS page must not replay
+  // an old denial after a newer, valid session has already been confirmed.
+  if (accountReady && code && typeof history !== 'undefined' && typeof location.href === 'string') {
+    const url = new URL(location.href); url.searchParams.delete('presenca');
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  }
 }
 async function presenceAction(action) {
   if (presenceBusy || !presenceSession?.csrf) return;
+  presenceRefreshId++;
   presenceBusy = true;
   $('presence-mark').disabled = $('presence-remove').disabled = $('presence-logout').disabled = true;
   try {
@@ -683,6 +714,7 @@ async function presenceAction(action) {
 $('presence-mark').addEventListener('click', () => presenceAction('marcar'));
 $('presence-remove').addEventListener('click', () => presenceAction('remover'));
 $('presence-logout').addEventListener('click', () => presenceAction('sair'));
+window.addEventListener('pageshow', event => { if (event.persisted) return pollPresence(); });
 async function pollLibrary() {
   clearTimeout(libraryTimer); if (document.hidden) return;
   try { renderLibrary(await getJson('/api/biblioteca')); }

@@ -20,8 +20,8 @@
   <link rel="preconnect" href="https://i.scdn.co" crossorigin>
   <link rel="preconnect" href="https://www.youtube.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=ogg-20261116-8">
-  <script src="/app.js?v=ogg-20261116-8" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=ogg-20261116-9">
+  <script src="/app.js?v=ogg-20261116-9" defer></script>
 </head>
 <body>
   <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -35,7 +35,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M15 8V4H4v11h4"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
-    <symbol id="i-spotify" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M6.5 9c4-1.3 7.5-1 11 1M7.5 12c3.3-1 6.5-.7 9.3 1M8.5 15c2.8-.7 5-.5 7.3.8" stroke="#101110" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-spotify" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M6.5 9c4-1.3 7.5-1 11 1M7.5 12c3.3-1 6.5-.7 9.3 1M8.5 15c2.8-.7 5-.5 7.3.8" stroke="var(--spotify-cutout, #101110)" stroke-width="1.5" stroke-linecap="round"/></symbol>
   </defs></svg>
   <a class="skip" href="#agora">Pular para a música</a>
   <div class="ambient" id="ambient" aria-hidden="true"></div><div class="music-field" aria-hidden="true"><i></i><i></i><i></i><span></span><div id="music-particles" class="music-particles"></div></div>
@@ -101,8 +101,10 @@
       <div class="presence-panel">
         <div class="presence-wall" id="presence-wall" aria-live="polite"><p class="presence-empty">O mural tá aberto. O próximo nome pode ser o teu.</p></div>
         <p class="presence-feedback" id="presence-feedback" role="status"></p>
-        <a class="primary-btn presence-login" id="presence-login" href="/api/presenca?acao=entrar"><svg aria-hidden="true"><use href="#i-spotify"/></svg>Entrar com Spotify<svg class="small-icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
-        <div class="presence-session" id="presence-session" hidden><p id="presence-greeting"></p><div class="presence-actions"><button class="primary-btn" id="presence-mark">Marcar minha presença</button><button class="presence-text-btn" id="presence-remove" hidden>Remover do mural</button><button class="presence-text-btn" id="presence-logout">Sair</button></div></div>
+        <a class="primary-btn presence-login" id="presence-login" href="/api/presenca?acao=entrar"><svg aria-hidden="true"><use href="#i-spotify"/></svg><span id="presence-login-label">Entrar com Spotify</span><svg class="small-icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        <p class="presence-login-help" id="presence-login-help" hidden>Na tela do Spotify, confere a conta exibida. Se precisar, usa a opção de trocar a conta antes de autorizar.</p>
+        <div class="presence-session" id="presence-session" hidden><div class="presence-account"><img id="presence-user-image" alt="" width="40" height="40" hidden><p id="presence-greeting"></p></div><div class="presence-actions"><button class="primary-btn" id="presence-mark">Marcar minha presença</button><button class="presence-text-btn" id="presence-remove" hidden>Remover do mural</button><a class="presence-text-btn" href="/api/presenca?acao=entrar">Conferir / trocar conta</a><button class="presence-text-btn" id="presence-logout">Sair</button></div></div>
+        <p class="presence-browser-note">Cada navegador mantém seu próprio login.</p>
         <p class="presence-privacy">Só teu nome, foto e link do perfil aparecem, depois que tu confirmar. Nenhuma playlist ou histórico teu é publicado.</p>
         <details class="presence-access"><summary>Spotify · acesso em testes</summary><p>Por enquanto, o Spotify permite o login apenas de contas liberadas pelo OGG. Se tua conta não entrar, me chama no <a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">@oggdann</a>. O mural mostra as presenças dos últimos 30 dias.</p></details>
       </div>

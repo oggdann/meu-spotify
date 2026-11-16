@@ -225,9 +225,14 @@ body.has-youtube.player-collapsed{padding-bottom:110px}
 .presence-person-copy small{font-size:10px;color:var(--muted)}
 .presence-feedback:empty{display:none}
 .presence-feedback{font-size:12px;line-height:1.6;color:var(--accent);margin-block:12px}
-.presence-login{width:100%;font-size:13px;min-height:50px;gap:9px}
+.presence-login{--spotify-cutout:var(--accent);width:100%;font-size:13px;min-height:50px;gap:9px}
 .presence-login svg:last-child{width:16px;margin-left:auto}
 .presence-session>p{font-size:13px;line-height:1.6;margin-block:14px;color:var(--muted)}
+.presence-account{display:flex;align-items:center;gap:11px;margin-block:16px}
+.presence-account img{width:40px;height:40px;object-fit:cover;border-radius:50%;flex:none}
+.presence-account p{font-size:13px;line-height:1.5;overflow-wrap:anywhere;color:var(--text)}
+.presence-login-help{font-size:12px;line-height:1.7;color:var(--muted);margin-top:12px}
+.presence-browser-note{font-size:10px;line-height:1.6;color:var(--muted);margin-top:12px}
 .presence-actions{display:flex;align-items:center;gap:15px;flex-wrap:wrap}
 .presence-actions .primary-btn{font-size:12px;min-height:46px}
 .presence-text-btn{font-size:12px;color:var(--accent);background:none;min-height:44px;padding:0}

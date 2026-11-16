@@ -261,3 +261,43 @@ test('official four-week Spotify rankings show without misleading sample totals 
   assert.match(h.node('stats-context').textContent,/oficial.*4 semanas/);
   assert.match(h.node('stats-disclosure').textContent,/atualizados automaticamente/);
 });
+const guestProfile={id:'guest',name:'Visitante',url:'https://open.spotify.com/user/guest',image:null};
+const publicJson=value=>new Response(JSON.stringify(value));
+test('an authenticated presence session wins over a stale denial and clears callback feedback from the URL',async()=>{
+  const calls=[],h=playerHarness((url,options)=>{calls.push(options);return Promise.resolve(publicJson(url.includes('acao=eu')?{profile:guestProfile,csrf:'token',enabled:true}:{items:[],availability:'ready'}))});
+  h.context.location.search='?v=9&presenca=conta-nao-liberada';h.context.location.href='https://oggspotify.vercel.app/?v=9&presenca=conta-nao-liberada#presenca';
+  let cleaned;h.context.history={state:null,replaceState(_state,_title,url){cleaned=url}};
+  await h.run('document.hidden=false;pollPresence()');
+  assert.equal(h.node('presence-login').hidden,true);assert.equal(h.node('presence-session').hidden,false);
+  assert.match(h.node('presence-greeting').textContent,/Visitante/);assert.match(h.node('presence-feedback').textContent,/Marcar minha presença/);
+  assert.doesNotMatch(h.node('presence-feedback').textContent,/recusou|não liberou/);
+  assert.equal(cleaned,'/?v=9#presenca');assert.ok(calls.every(o=>o.cache==='no-store'&&o.credentials==='same-origin'));
+});
+test('a completed OAuth callback without a saved browser session does not silently return to the login button',async()=>{
+  const h=playerHarness(url=>Promise.resolve(publicJson(url.includes('acao=eu')?{profile:null,enabled:true}:{items:[],availability:'ready'})));
+  h.context.location.search='?presenca=conectado';
+  await h.run('document.hidden=false;pollPresence()');
+  assert.equal(h.node('presence-login').hidden,false);assert.match(h.node('presence-feedback').textContent,/não manteve a sessão/);
+  assert.equal(h.node('presence-login-label').textContent,'Conferir conta no Spotify');
+});
+test('a Spotify profile denial offers account review instead of asserting which account the browser used',async()=>{
+  const h=playerHarness(url=>Promise.resolve(publicJson(url.includes('acao=eu')?{profile:null,enabled:true}:{items:[],availability:'ready'})));
+  h.context.location.search='?presenca=perfil-recusado';
+  await h.run('document.hidden=false;pollPresence()');
+  assert.match(h.node('presence-feedback').textContent,/Confere a conta/);assert.equal(h.node('presence-login-help').hidden,false);
+  assert.equal(h.node('presence-login-label').textContent,'Conferir conta no Spotify');
+});
+test('restoring the page from browser history refreshes the real presence session',async()=>{
+  let profile=null;
+  const h=playerHarness(url=>Promise.resolve(publicJson(url.includes('acao=eu')?{profile,enabled:true}:{items:[],availability:'ready'})));
+  await h.run('document.hidden=false;pollPresence()');assert.equal(h.node('presence-login').hidden,false);
+  profile=guestProfile;await h.windowEvents.get('pageshow')({persisted:true});
+  assert.equal(h.node('presence-login').hidden,true);assert.equal(h.node('presence-session').hidden,false);
+});
+test('a slower old session response cannot undo a newer successful login',async()=>{
+  let resolveOld,reads=0;
+  const h=playerHarness(url=>url.includes('acao=eu')?(++reads===1?new Promise(resolve=>{resolveOld=resolve}):Promise.resolve(publicJson({profile:guestProfile,enabled:true}))):Promise.resolve(publicJson({items:[],availability:'ready'})));
+  const old=h.run('document.hidden=false;pollPresence()');
+  await h.run('pollPresence()');resolveOld(publicJson({profile:null,enabled:true}));await old;
+  assert.equal(h.node('presence-login').hidden,true);assert.match(h.node('presence-greeting').textContent,/Visitante/);
+});
