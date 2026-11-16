@@ -25,6 +25,7 @@
 </head>
 <body>
   <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2v20M2 12h20M5 5l14 14M5 19 19 5"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="4"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M5 5h14v14"/></symbol>
@@ -37,7 +38,7 @@
     <symbol id="i-spotify" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M6.5 9c4-1.3 7.5-1 11 1M7.5 12c3.3-1 6.5-.7 9.3 1M8.5 15c2.8-.7 5-.5 7.3.8" stroke="#101110" stroke-width="1.5" stroke-linecap="round"/></symbol>
   </defs></svg>
   <a class="skip" href="#agora">Pular para a música</a>
-  <div class="ambient" id="ambient" aria-hidden="true"></div><div class="music-field" aria-hidden="true"><i></i><i></i><i></i><span></span></div>
+  <div class="ambient" id="ambient" aria-hidden="true"></div><div class="music-field" aria-hidden="true"><i></i><i></i><i></i><span></span><div id="music-particles" class="music-particles"></div></div>
   <header class="topbar wrap">
     <a class="brand" href="#agora" aria-label="OGG — início"><img src="/assets/ogg-orbital.png" alt="OGG" width="1774" height="887"><span>MINHA FREQUÊNCIA<span class="brand-sub">CRIADO POR @oggdann</span></span></a>
     <nav aria-label="Navegação principal"><a href="#agora" class="nav-link active">Agora</a><a href="#playlists" class="nav-link">Playlists</a><a href="#recentes" class="nav-link">Recentes</a></nav>
@@ -47,13 +48,13 @@
     <section class="hero" id="agora" aria-labelledby="hero-heading">
       <div class="hero-copy">
         <div class="eyebrow"><span class="tiny-star">✦</span> OGG / TRANSMISSÃO SEM FILTRO</div>
-        <h1 id="hero-heading">Meu som.<br><em>Sem filtro.</em><span class="heading-star" aria-hidden="true">✳</span></h1>
-        <p class="intro">Do grave à brisa.<br>O que bate aqui, toca aqui.</p><a class="instagram-callout" href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer"><span>SITE CRIADO POR</span><strong>@oggdann</strong><svg aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="spotify-profile-callout" href="https://open.spotify.com/user/dq78sjzflg084c1ibpjuo8gjc" target="_blank" rel="noopener noreferrer"><svg aria-hidden="true"><use href="#i-spotify"/></svg>Meu perfil no Spotify <span aria-hidden="true">↗</span></a>
+        <h1 id="hero-heading">Meu som.<br><em>Sem filtro.</em><span class="heading-star" aria-hidden="true"><svg><use href="#i-star"/></svg></span></h1>
+        <p class="intro">Do grave à brisa.<br>O que bate aqui, toca aqui.</p><a class="instagram-callout" href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer"><span>SITE CRIADO POR</span><strong>@oggdann</strong><svg aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="spotify-profile-callout" href="https://open.spotify.com/user/dq78sjzflg084c1ibpjuo8gjc" target="_blank" rel="noopener noreferrer"><svg aria-hidden="true"><use href="#i-spotify"/></svg>Meu perfil no Spotify <span aria-hidden="true">↗︎</span></a>
         <div class="now-block">
           <div class="live-label"><span class="live-dot" id="live-dot"></span><span id="owner-status" aria-live="polite">CONECTANDO AO SPOTIFY</span><span class="live-line"></span></div>
           <h2 id="track-title" class="track-title">Preparando o som…</h2>
           <p class="track-artist" id="track-artist">Puxando o som do meu corre.</p>
-          <div class="owner-playlist" id="owner-playlist" hidden><svg aria-hidden="true"><use href="#i-spotify"/></svg><span>DA PLAYLIST <strong id="owner-playlist-name"></strong></span><a id="owner-playlist-link" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer">Abrir e salvar <span aria-hidden="true">↗</span></a></div>
+          <div class="owner-playlist" id="owner-playlist" hidden><a id="owner-playlist-cover-link" class="playlist-cover-link" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer" aria-label="Abrir playlist atual no Spotify"><img id="owner-playlist-cover" src="/assets/ogg-orbital.png" alt="Capa da playlist atual" width="44" height="44"></a><span>DA PLAYLIST <strong id="owner-playlist-name"></strong></span><a id="owner-playlist-link" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer">Abrir e salvar <span aria-hidden="true">↗︎</span></a></div>
           <div class="owner-progress"><div class="progress-track" id="owner-progress" role="progressbar" aria-label="Posição da música no Spotify do OGG" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-fill"></span></div><div class="progress-times"><span id="progress-time">0:00</span><span id="duration-time">0:00</span></div></div>
           <div class="hero-actions"><button class="primary-btn" id="listen" disabled><svg><use id="listen-icon" href="#i-play"/></svg><span id="listen-label">Ouvir junto</span></button><button class="secondary-btn" id="share"><svg><use href="#i-copy"/></svg><span>Compartilhar</span></button></div>
           <div class="audio-note" id="audio-note" role="status">A mesma faixa que eu ouço, no teu player.</div>
@@ -63,10 +64,10 @@
         <div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div>
         <div class="orbit-word orbit-word-top" aria-hidden="true">OGG / ON REPEAT /</div>
         <div class="cover-card" id="cover-card" role="button" tabindex="0" aria-label="Alternar modo imersivo" title="Toque para entrar no modo imersivo">
-          <div class="cover-image" id="cover-image"><img class="cover-logo" src="/assets/ogg-orbital.png" alt="" aria-hidden="true"><img id="album-art" alt="Capa do álbum" hidden></div>
+          <div class="cover-image" id="cover-image"><img class="cover-logo" src="/assets/ogg-orbital.png" alt="" aria-hidden="true"><img id="album-art" alt="Capa do álbum" hidden><div class="inline-video-slot" id="inline-video-slot" hidden><div id="youtube-player"><div id="youtube-embed"></div></div></div></div>
           <div class="cover-bottom"><span class="mono" id="cover-caption">FREQUÊNCIA PESSOAL</span><div class="mini-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div>
         </div>
-        <div class="art-signature"><a class="ogg-stamp" href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer" aria-label="OGG no Instagram"><img src="/assets/ogg-orbital.png" alt="Marca OGG" width="1774" height="887"></a><a class="signature-instagram" href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer"><span>O CORRE TEM DONO.</span><strong>@oggdann ↗</strong></a></div>
+        <div class="art-signature"><a class="ogg-stamp" href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer" aria-label="OGG no Instagram"><img src="/assets/ogg-orbital.png" alt="Marca OGG" width="1774" height="887"></a><a class="signature-instagram" href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer"><span>O CORRE TEM DONO.</span><strong>@oggdann ↗︎</strong></a></div>
         <div class="art-caption"><span>VIVÊNCIA NO PLAY.<br>SEM PERSONAGEM.</span><span class="edition">VOL. 001<br>BAHIA, BR</span></div>
       </div>
     </section>
@@ -75,6 +76,14 @@
       <div class="profile-avatar"><img id="profile-image" src="/assets/ogg-orbital.png" alt="Perfil de Daniel Victor" width="80" height="80"></div>
       <div class="profile-copy"><span class="eyebrow">QUEM SOLTA O PLAY</span><h2 id="profile-name">Daniel Victor <span class="handle">/ ogg</span></h2><p>Sem pose. Só eu e os sons do meu corre.</p></div>
       <a class="outline-btn profile-link" id="profile-link" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer"><svg><use href="#i-spotify"/></svg>Meu perfil no Spotify<svg class="small-icon"><use href="#i-arrow"/></svg></a>
+    </section>
+    <section class="listening-stats content-section" id="numeros" aria-labelledby="stats-heading">
+      <div class="section-heading"><div><span class="eyebrow">MEU PLAY EM NÚMEROS</span><h2 id="stats-heading">O som deixa <em>rastro.</em></h2></div><div class="stats-periods" role="group" aria-label="Período das estatísticas"><button id="stats-week" aria-pressed="true">7 dias</button><button id="stats-month" aria-pressed="false">30 dias</button></div></div>
+      <p class="stats-context" id="stats-context">Buscando os registros do meu Spotify…</p>
+      <div class="stats-metrics"><article><span>REPRODUÇÕES NO RECORTE</span><strong id="stats-plays">—</strong></article><article><span>MINUTOS ESTIMADOS NO RECORTE</span><strong id="stats-minutes">—</strong></article></div>
+      <p class="stats-disclosure" id="stats-disclosure">Recorte das últimas 50 reproduções disponíveis. Os minutos somam a duração das faixas; não medem pausas ou pulos e podem não cobrir o período inteiro.</p>
+      <div class="stats-rankings"><article><h3>Quem dominou o play.</h3><ol id="stats-artists"><li class="stats-empty">Os artistas aparecem por aqui.</li></ol></article><article><h3>As que ficaram.</h3><ol id="stats-tracks"><li class="stats-empty">Os sons aparecem por aqui.</li></ol></article></div>
+      <p class="stats-footnote" id="stats-footnote"></p>
     </section>
     <section class="library-section content-section" id="playlists" aria-labelledby="playlists-title">
       <div class="section-heading"><div><span class="eyebrow">PRA CADA FASE, UM SOM</span><h2 id="playlists-title">Arquivo <em>pessoal.</em><span class="count" id="playlist-count">—</span></h2></div><label class="search-box"><svg><use href="#i-search"/></svg><input id="playlist-search" type="search" placeholder="Encontre uma playlist" aria-label="Buscar nas playlists públicas" autocomplete="off"></label></div>
@@ -89,22 +98,21 @@
     </section>
     <footer class="footer content-section"><a href="#agora" aria-label="Voltar ao início"><img src="/assets/ogg-orbital.png" alt="OGG" width="1774" height="887"></a><p>Criado por Daniel Victor.<br><span>@oggdann / Feito do meu jeito.</span></p><a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">@oggdann <svg><use href="#i-arrow"/></svg></a></footer>
   </main>
-  <aside class="player-dock" id="player-dock" aria-label="Player de música" hidden>
-    <div class="dock-top"><div class="dock-heading"><svg><use href="#i-sound"/></svg><span id="player-context">OUVINDO COM OGG</span><span class="dock-state" id="player-state">Preparando player…</span></div><label class="follow-switch"><input type="checkbox" id="follow" checked><span class="switch-track"></span><span>Acompanhar trocas</span></label><button class="round-btn collapse-btn" id="collapse-player" aria-label="Recolher player" aria-expanded="true">⌄</button></div>
+  <aside class="player-dock collapsed" id="player-dock" aria-label="Player de música" hidden>
+    <div class="dock-top"><div class="dock-heading"><svg><use href="#i-sound"/></svg><span id="player-context">OUVINDO COM OGG</span><span class="dock-track" id="dock-track"></span><span class="dock-state" id="player-state">Preparando player…</span></div><label class="follow-switch"><input type="checkbox" id="follow" checked><span class="switch-track"></span><span>Acompanhar trocas</span></label><button class="round-btn dock-play" id="dock-play" aria-label="Tentar ouvir música"><svg><use id="dock-play-icon" href="#i-play"/></svg></button><button class="round-btn collapse-btn" id="collapse-player" aria-label="Abrir controles de música" aria-expanded="false">⌄</button></div>
     <div class="player-options"><label for="player-source">Ouvir por</label><select id="player-source"><option value="auto">Automático</option><option value="youtube">YouTube</option><option value="spotify">Spotify</option></select><span id="provider-label">Procurando a mesma faixa…</span></div>
     <p class="selected-track" id="selected-track"></p>
     <div class="dock-body" id="dock-body">
       <div id="spotify-player"><div id="spotify-embed"></div></div>
-      <div id="youtube-player" hidden><div id="youtube-embed"></div></div>
       <div class="player-unavailable" id="player-unavailable" hidden><p id="player-unavailable-note" role="status"></p><button class="outline-btn" id="use-spotify">Escolher Spotify</button></div>
       <div class="spotify-access" id="spotify-access" hidden>
         <p><strong>Só está tocando uma prévia?</strong> Entre ou crie uma conta no Spotify neste navegador. A faixa completa depende da sua conta e da disponibilidade.</p>
-        <a class="spotify-login-btn" id="spotify-login-link" href="https://accounts.spotify.com/login" target="_blank" rel="noopener noreferrer">Entrar no Spotify <span aria-hidden="true">↗</span></a>
+        <a class="spotify-login-btn" id="spotify-login-link" href="https://accounts.spotify.com/login" target="_blank" rel="noopener noreferrer">Entrar no Spotify <span aria-hidden="true">↗︎</span></a>
         <button class="spotify-retry-btn" id="spotify-retry">Já entrei · tentar novamente</button>
       </div>
       <p class="player-disclaimer" id="player-disclaimer">YouTube para ouvir sem conta do Spotify, quando a mesma faixa estiver disponível.</p>
     </div>
-    <p class="dock-creator">CRIADO POR <a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">@oggdann</a><span>·</span><a href="https://open.spotify.com/user/dq78sjzflg084c1ibpjuo8gjc" target="_blank" rel="noopener noreferrer">MEU SPOTIFY ↗</a></p>
+    <p class="dock-creator">CRIADO POR <a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">@oggdann</a><span>·</span><a href="https://open.spotify.com/user/dq78sjzflg084c1ibpjuo8gjc" target="_blank" rel="noopener noreferrer">MEU SPOTIFY ↗︎</a></p>
   </aside>
   <div class="toast" id="toast" role="status" hidden></div>
 </body>

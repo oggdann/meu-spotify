@@ -3,9 +3,10 @@ const $ = id => document.getElementById(id);
 const state = { now: null, library: null, controller: null, spotifyController: null, spotifyReady: false, spotifyUri: null, provider: 'spotify', preferred: 'auto', transitioning: false, unavailable: false, api: null, loadedUri: null, selected: null, follow: true, wantsAudio: true, audible: false, ready: false, pendingPlay: false, playlistLimit: 8, recentLimit: 8, retryMs: 8000, failures: 0 };
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const iconNS = 'http://www.w3.org/2000/svg';
-let pollTimer, libraryTimer, autoplayTimer, videoBufferTimer, toastTimer, iframeLoading = false, spotifyCreating = false;
+let pollTimer, libraryTimer, statsTimer, autoplayTimer, videoBufferTimer, toastTimer, iframeLoading = false, spotifyCreating = false;
 let selectionId = 0, youtubeLoading = false, youtubeReady = false, youtubePlayer = null, youtubePlayerReady = false, youtubeAdapter = null, youtubeUri = null, youtubeVideo = null, youtubeStarted = false;
 const videoMatches = new Map();
+let youtubeVisible = !('IntersectionObserver' in window);
 
 function icon(name) {
   const svg = document.createElementNS(iconNS, 'svg'), use = document.createElementNS(iconNS, 'use');
@@ -43,7 +44,8 @@ function externalLink(url, label) {
   const a = el('a', '', label); a.href = safeUrl(url) || 'https://open.spotify.com/'; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a;
 }
 let paletteSource = null;
-const spectrumBars = [];
+const spectrumBars = [], musicParticles = [];
+let listeningStats = null, statsPeriod = 7;
 function coverPalette(pixels) {
   const buckets = new Map();
   for (let i = 0; i < pixels.length; i += 4) {
@@ -99,6 +101,12 @@ function setMusicScene(content) {
     bar.style.setProperty('--h', (7 + Math.abs(Math.sin(seed + i * 1.37)) * 22) + 'px');
     bar.style.setProperty('--delay', (-i * .091 - seed % 4) + 's');
   });
+  musicParticles.forEach((particle, i) => {
+    particle.style.setProperty('--x', ((seed + i * 137) % 100) + '%');
+    particle.style.setProperty('--y', ((seed + i * 73) % 100) + '%');
+    particle.style.setProperty('--particle-cycle', (7 + (seed + i) % 9) + 's');
+    particle.style.setProperty('--particle-delay', (-i * .7) + 's');
+  });
   setCoverPalette(content.albumImageUrl || state.now?.albumImageUrl);
 }
 function setArtwork(url) {
@@ -118,6 +126,10 @@ function updateButton() {
   $('listen-icon').setAttribute('href', playingLive ? '#i-pause' : '#i-play');
   $('listen-label').textContent = playingLive ? 'Pausar som' : (state.follow ? (state.unavailable ? 'Escolher player' : state.transitioning ? 'Preparando som…' : state.ready && state.wantsAudio ? 'Ativar som' : 'Ouvir junto') : 'Voltar ao som do OGG');
   document.body.classList.toggle('is-audible', state.audible);
+  $('dock-track').textContent = state.selected?.title || 'Preparando o som…';
+  $('dock-play').disabled = !state.selected;
+  $('dock-play').setAttribute('aria-label', state.audible ? 'Pausar música' : 'Tentar ouvir música');
+  $('dock-play-icon').setAttribute('href', state.audible ? '#i-pause' : '#i-play');
 }
 function renderNow(data) {
   const previous = state.now;
@@ -130,7 +142,12 @@ function renderNow(data) {
   const playlistUrl = data.hasTrack && data.playlist?.id && /^[A-Za-z0-9]{22}$/.test(data.playlist.id) ? safeUrl(data.playlist.url) : null;
   $('owner-playlist').hidden = !playlistUrl;
   $('owner-playlist-name').textContent = playlistUrl ? data.playlist.name : '';
-  if (playlistUrl) $('owner-playlist-link').href = playlistUrl;
+  if (playlistUrl) {
+    $('owner-playlist-link').href = playlistUrl;
+    $('owner-playlist-cover-link').href = playlistUrl;
+    $('owner-playlist-cover').src = safeUrl(data.playlist.image, true) || '/assets/ogg-orbital.png';
+    $('owner-playlist-cover').alt = 'Capa de ' + data.playlist.name;
+  }
   else $('owner-playlist-link').removeAttribute('href');
   $('duration-time').textContent = time(data.durationMs);
   $('cover-caption').textContent = data.hasTrack ? data.album || 'OGG / ON REPEAT' : 'FREQUÊNCIA PESSOAL';
@@ -198,7 +215,7 @@ function createController() {
 function attemptPlay() {
   if (state.transitioning || state.unavailable || !state.wantsAudio) return;
   state.pendingPlay = true;
-  if (!state.controller || !state.ready) return;
+  if (!state.controller || !state.ready || (state.provider === 'youtube' && !youtubeVisible)) return;
   state.pendingPlay = false;
   state.controller.play();
   clearTimeout(autoplayTimer);
@@ -219,6 +236,10 @@ function showProvider(provider) {
   $('player-unavailable').hidden = true;
   $('spotify-player').hidden = provider !== 'spotify'; $('youtube-player').hidden = provider !== 'youtube';
   $('spotify-access').hidden = provider !== 'spotify';
+  $('inline-video-slot').hidden = provider !== 'youtube';
+  $('cover-card').classList.toggle('has-video', provider === 'youtube');
+  $('cover-card').setAttribute('role', provider === 'youtube' ? 'group' : 'button');
+  $('cover-card').setAttribute('aria-label', provider === 'youtube' ? 'Vídeo da faixa selecionada' : 'Alternar modo imersivo');
   $('player-dock').classList.toggle('youtube-active', provider === 'youtube');
   document.body.classList.toggle('has-youtube', provider === 'youtube');
   $('provider-label').textContent = provider === 'youtube' ? 'YouTube · sem conta do Spotify' : 'Player oficial do Spotify';
@@ -255,13 +276,14 @@ function unavailableYouTube(message) {
   state.transitioning = false;
   showProvider('youtube');
   state.unavailable = true; state.pendingPlay = false;
-  $('youtube-player').hidden = true; $('spotify-player').hidden = true;
+  $('youtube-player').hidden = true; $('spotify-player').hidden = true; $('inline-video-slot').hidden = true; $('cover-card').classList.remove('has-video');
+  $('cover-card').setAttribute('role', 'button'); $('cover-card').setAttribute('aria-label', 'Alternar modo imersivo');
   $('player-unavailable').hidden = false; $('player-unavailable-note').textContent = message;
   $('spotify-access').hidden = false;
   $('provider-label').textContent = 'YouTube · indisponível para esta faixa';
   $('player-state').textContent = 'Escolha outro player'; $('audio-note').textContent = message;
   $('player-disclaimer').textContent = 'O Spotify continua disponível como outra opção de reprodução.';
-  $('player-dock').classList.remove('collapsed'); $('collapse-player').setAttribute('aria-expanded', 'true');
+
   document.body.classList.remove('has-youtube');
   updateButton();
 }
@@ -275,6 +297,9 @@ function youtubeFailure() {
 function youtubeState(event) {
   if (state.provider !== 'youtube' || state.controller !== youtubeAdapter || state.transitioning || state.unavailable) return;
   clearTimeout(videoBufferTimer);
+  if (event.data === 1 && !youtubeVisible) {
+    state.audible = false; state.pendingPlay = state.wantsAudio; youtubePlayer?.pauseVideo?.(); updateButton(); return;
+  }
   if (event.data === 1) {
     youtubeStarted = true; state.audible = true; state.wantsAudio = true; clearTimeout(autoplayTimer);
     $('player-state').textContent = 'Som ligado';
@@ -300,14 +325,14 @@ function startYouTube() {
     youtubeAdapter = { play: () => { youtubePlayer?.playVideo?.(); }, pause: () => { youtubePlayer?.pauseVideo?.(); } };
     state.controller = youtubeAdapter;
     youtubePlayer = new YT.Player('youtube-embed', { host: 'https://www.youtube-nocookie.com', width: '100%', height: '270', videoId: youtubeVideo,
-      playerVars: { autoplay: state.wantsAudio ? 1 : 0, controls: 1, playsinline: 1, rel: 0, origin: location.origin },
+      playerVars: { autoplay: state.wantsAudio && youtubeVisible ? 1 : 0, controls: 1, playsinline: 1, rel: 0, origin: location.origin },
       events: {
         onReady: () => {
           youtubePlayerReady = true;
           if (state.provider !== 'youtube' || state.controller !== youtubeAdapter || state.transitioning || state.unavailable) { youtubePlayer.pauseVideo(); return; }
           state.ready = true;
           if (youtubeVideo !== initialVideo) {
-            if (state.pendingPlay && state.wantsAudio) youtubePlayer.loadVideoById(youtubeVideo);
+            if (state.pendingPlay && state.wantsAudio && youtubeVisible) youtubePlayer.loadVideoById(youtubeVideo);
             else youtubePlayer.cueVideoById(youtubeVideo);
           } else if (state.pendingPlay && state.wantsAudio) attemptPlay();
           else youtubePlayer.pauseVideo();
@@ -323,7 +348,7 @@ function startYouTube() {
     if (!youtubePlayerReady) return;
     if (youtubeUri !== state.selected.uri) {
       youtubeStarted = false;
-      if (state.wantsAudio && state.pendingPlay) youtubePlayer.loadVideoById(youtubeVideo);
+      if (state.wantsAudio && state.pendingPlay && youtubeVisible) youtubePlayer.loadVideoById(youtubeVideo);
       else youtubePlayer.cueVideoById(youtubeVideo);
     } else if (state.pendingPlay && state.wantsAudio) attemptPlay();
   }
@@ -369,20 +394,18 @@ async function selectContent(content, { follow = false, play = true, automatic =
   if (/^[\w-]{11}$/.test(match?.videoId || '')) {
     showProvider('youtube');
     state.loadedUri = content.uri; youtubeVideo = match.videoId;
-    $('player-dock').classList.remove('collapsed'); $('collapse-player').setAttribute('aria-expanded', 'true');
-    $('collapse-player').setAttribute('aria-label', 'Recolher player e pausar vídeo');
+
     ensureYouTube();
   } else if (state.preferred === 'youtube') unavailableYouTube(content.uri.startsWith('spotify:playlist:') ? 'Esta playlist abre no Spotify. Para ouvir pelo YouTube, escolha uma faixa da lista de recentes.' : 'Ainda não encontrei esta faixa no YouTube. Escolha outra música ou use o Spotify.');
   else useSpotify(content, play);
   if (!automatic) {
-    $('player-dock').classList.remove('collapsed'); $('collapse-player').setAttribute('aria-expanded', 'true');
-    $('collapse-player').setAttribute('aria-label', 'Recolher player');
+
     toast(follow ? 'Na mesma frequência do OGG.' : `No player: ${content.title || 'playlist'}`);
   }
   updateButton();
 }
 $('listen').addEventListener('click', () => {
-  if (state.unavailable && state.follow) { $('player-source').focus(); toast('Escolha Spotify ou outra faixa disponível no YouTube.'); return; }
+  if (state.unavailable && state.follow) { setDockExpanded(true); $('player-source').focus(); toast('Escolha Spotify ou outra faixa disponível no YouTube.'); return; }
   if (state.audible && state.follow && state.loadedUri === state.now?.uri) {
     state.wantsAudio = false; state.pendingPlay = false; clearTimeout(autoplayTimer); state.controller?.pause(); state.audible = false;
     $('audio-note').textContent = 'Som pausado por aqui. O Spotify do OGG continua normalmente.'; updateButton(); return;
@@ -422,19 +445,31 @@ function unlockOnInteraction(event) {
   if (!event.isTrusted || !state.wantsAudio || state.audible || !state.ready || !state.selected) return;
   if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
   const control = event.target instanceof Element ? event.target.closest('button, a, input, label') : null;
-  if (control?.id === 'listen' || control?.matches('.playlist-play, .recent-play, a[target="_blank"]')) return;
+  if (control?.id === 'listen' || control?.id === 'dock-play' || control?.id === 'spotify-retry' || control?.matches('.playlist-play, .recent-play, a[target="_blank"]')) return;
   attemptPlay();
 }
 document.addEventListener('click', unlockOnInteraction);
 document.addEventListener('keydown', unlockOnInteraction);
-$('collapse-player').addEventListener('click', () => {
-  if (state.provider === 'youtube' && !$('player-dock').classList.contains('collapsed')) {
-    state.wantsAudio = false; state.pendingPlay = false; state.controller?.pause(); state.audible = false;
-    $('player-state').textContent = 'Som pausado'; updateButton();
+function setDockExpanded(expanded) {
+  const collapsed = !expanded;
+  $('player-dock').classList.toggle('collapsed', collapsed);
+  document.body.classList.toggle('player-collapsed', collapsed);
+  $('collapse-player').setAttribute('aria-expanded', String(expanded));
+  $('collapse-player').setAttribute('aria-label', expanded ? 'Recolher controles de música' : 'Abrir controles de música');
+}
+setDockExpanded(false);
+$('collapse-player').addEventListener('click', () => setDockExpanded($('player-dock').classList.contains('collapsed')));
+$('dock-play').addEventListener('click', () => {
+  if (!state.selected) return;
+  if (state.unavailable) { setDockExpanded(true); $('player-source').focus(); return; }
+  if (state.audible) {
+    state.wantsAudio = false; state.pendingPlay = false; clearTimeout(autoplayTimer);
+    state.controller?.pause(); state.audible = false; $('player-state').textContent = 'Som pausado'; updateButton();
+  } else {
+    state.wantsAudio = true;
+    if (state.provider === 'youtube' && !youtubeVisible) $('inline-video-slot').scrollIntoView({behavior:reducedMotion?'auto':'smooth',block:'center'});
+    attemptPlay();
   }
-  const collapsed = $('player-dock').classList.toggle('collapsed');
-  $('collapse-player').setAttribute('aria-expanded', String(!collapsed));
-  $('collapse-player').setAttribute('aria-label', collapsed ? 'Expandir player' : 'Recolher player');
 });
 
 function cover(src, name, className = '') {
@@ -505,6 +540,44 @@ async function pollNow() {
     if (!state.now) { $('track-title').textContent = 'O som volta já.'; $('track-artist').textContent = 'Explora a coleção enquanto a conexão volta.'; }
   } finally { pollTimer = setTimeout(pollNow, state.retryMs); }
 }
+function renderStats(data) {
+  listeningStats = data;
+  const period = data.periods?.find(item => item.days === statsPeriod);
+  $('stats-week').setAttribute('aria-pressed', String(statsPeriod === 7));
+  $('stats-month').setAttribute('aria-pressed', String(statsPeriod === 30));
+  $('stats-plays').textContent = data.recentAvailability === 'ready' ? String(period?.plays || 0) : '—';
+  $('stats-minutes').textContent = data.recentAvailability === 'ready' ? String(period?.estimatedMinutes || 0) : '—';
+  const official = statsPeriod === 30 && data.top?.availability === 'ready';
+  $('stats-context').textContent = official ? 'Rankings oficiais do Spotify · últimas 4 semanas. Os números abaixo continuam sendo do recorte recente.' : 'Últimos ' + statsPeriod + ' dias · recorte de até ' + (data.sampleSize || 50) + ' reproduções disponíveis.';
+  for (const type of ['artists', 'tracks']) {
+    const list = $('stats-' + type); list.replaceChildren();
+    const entries = official ? data.top[type] : period?.[type] || [];
+    entries.forEach((item, index) => {
+      const row = el('li', 'stats-rank');
+      row.append(el('span', 'stats-rank-number', String(index + 1).padStart(2, '0')));
+      const link = externalLink(item.songUrl || item.url, item.title || item.name);
+      link.className = 'stats-rank-link';
+      if (type === 'tracks' && item.albumImageUrl) {
+        const image = el('img'); image.src = safeUrl(item.albumImageUrl, true) || '/assets/ogg-orbital.png';
+        image.alt = ''; image.width = image.height = 36; image.loading = 'lazy';
+        link.prepend(image);
+      }
+      row.append(link);
+      if (!official) row.append(el('span', 'stats-rank-count', String(item.count) + '×'));
+      list.append(row);
+    });
+    if (!entries.length) list.append(el('li', 'stats-empty', 'Sem registros neste recorte.'));
+  }
+  $('stats-footnote').textContent = data.top?.availability === 'permission_required' ? 'O ranking completo de 4 semanas depende de liberar a leitura dos tops do Spotify. Minutos exatos da semana ou do mês precisam do histórico completo de escuta.' : 'Minutos exatos da semana ou do mês precisam do histórico completo de escuta. Aqui, as estimativas são identificadas.';
+}
+$('stats-week').addEventListener('click', () => { statsPeriod = 7; if (listeningStats) renderStats(listeningStats); });
+$('stats-month').addEventListener('click', () => { statsPeriod = 30; if (listeningStats) renderStats(listeningStats); });
+async function pollStats() {
+  clearTimeout(statsTimer); if (document.hidden) return;
+  try { renderStats(await getJson('/api/estatisticas')); }
+  catch { $('stats-context').textContent = 'Os números estão indisponíveis agora. O som continua.'; }
+  finally { statsTimer = setTimeout(pollStats, 300000); }
+}
 async function pollLibrary() {
   clearTimeout(libraryTimer); if (document.hidden) return;
   try { renderLibrary(await getJson('/api/biblioteca')); }
@@ -513,10 +586,10 @@ async function pollLibrary() {
 }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    clearTimeout(pollTimer); clearTimeout(libraryTimer);
-    if (state.provider === 'youtube') { state.wantsAudio = false; state.pendingPlay = false; state.controller?.pause(); state.audible = false; updateButton(); }
+    clearTimeout(pollTimer); clearTimeout(libraryTimer); clearTimeout(statsTimer);
+    if (state.provider === 'youtube') { state.pendingPlay = state.wantsAudio; state.audible = false; state.controller?.pause(); updateButton(); }
   }
-  else { pollNow(); pollLibrary(); }
+  else { pollNow(); pollLibrary(); pollStats(); if (state.provider === 'youtube' && state.wantsAudio) attemptPlay(); }
 });
 setInterval(() => {
   if (document.hidden) return;
@@ -541,11 +614,19 @@ function toggleImmersive(force) {
   if (enabled) window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
 }
 $('immersive').addEventListener('click', () => toggleImmersive());
-$('cover-card').addEventListener('click', () => toggleImmersive());
+$('cover-card').addEventListener('click', () => { if (state.provider !== 'youtube' || state.unavailable) toggleImmersive(); });
 $('cover-card').addEventListener('keydown', event => {
-  if (['Enter', ' '].includes(event.key)) { event.preventDefault(); toggleImmersive(); }
+  if (['Enter', ' '].includes(event.key) && (state.provider !== 'youtube' || state.unavailable)) { event.preventDefault(); toggleImmersive(); }
 });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') toggleImmersive(false); });
+for (let i = 0; i < 20; i++) {
+  const particle = document.createElement('b');
+  particle.style.setProperty('--x', ((i * 137) % 100) + '%');
+  particle.style.setProperty('--y', ((i * 73) % 100) + '%');
+  particle.style.setProperty('--particle-cycle', (7 + i % 9) + 's');
+  particle.style.setProperty('--particle-delay', (-i * .7) + 's');
+  $('music-particles').append(particle); musicParticles.push(particle);
+}
 for (let i = 0; i < 48; i++) {
   const bar = document.createElement('i'); bar.style.setProperty('--h', `${7 + Math.abs(Math.sin(i * 1.37)) * 19}px`); bar.style.setProperty('--delay', `${-i * .091}s`); $('spectrum').append(bar); spectrumBars.push(bar);
 }
@@ -564,4 +645,16 @@ if ('IntersectionObserver' in window) {
 }
 // Warm YouTube while the current song loads. Spotify loads only when selected
 // or when there is no matching YouTube version, so two players never start.
-ensureYouTube(); pollNow(); pollLibrary();
+ensureYouTube(); pollNow(); pollLibrary(); pollStats();
+
+if ('IntersectionObserver' in window) {
+  const videoVisibility = new IntersectionObserver(entries => {
+    youtubeVisible = entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= .5);
+    if (state.provider !== 'youtube' || state.unavailable || state.transitioning) return;
+    if (!youtubeVisible) {
+      state.pendingPlay = state.wantsAudio; state.audible = false; state.controller?.pause();
+      $('player-state').textContent = 'Vídeo pausado fora de vista'; updateButton();
+    } else if (state.wantsAudio) attemptPlay();
+  }, {threshold:[0,.5,1]});
+  videoVisibility.observe($('inline-video-slot'));
+}

@@ -16,7 +16,7 @@ export default async function handler(req, res) {
       let track = now.id === id && now.type === 'track' ? now : null;
       if (!track) {
         const recent = await cached('video-recent', 60000, async () => {
-          const data = await spotifyGet('/me/player/recently-played?limit=30');
+          const data = await spotifyGet('/me/player/recently-played?limit=50');
           return (data?.items || []).map(row => publicTrack(row.track)).filter(item => item?.type === 'track');
         });
         track = recent.find(item => item.id === id);

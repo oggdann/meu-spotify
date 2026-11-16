@@ -103,3 +103,10 @@ test('upstream quota errors stop the expanded search and suppress immediate retr
   const r=scenario("process.env.YOUTUBE_API_KEY='key';globalThis.fetch=async(url)=>{calls.push(String(url));return json({error:{message:'quota'}},403)};const {resolveVideo}=await import('./lib/youtube.js');const song="+JSON.stringify(beijo)+";const a=await resolveVideo(song),b=await resolveVideo(song);console.log(JSON.stringify({a,b,count:calls.length}));");
   assert.equal(r.count,1);assert.equal(r.a.reason,'search_unavailable');assert.equal(r.b.reason,'search_unavailable');
 });
+test('a medley search can use its distinctive main title without requiring every subtitle',()=>{
+  const song={title:'Quebra Dela Bebel 1.0: Botar Com Força / Menino do Sete / Vem Amor',artist:'Bibi Perigosa',durationMs:244444};
+  assert.equal(videoSearchQueries(song)[1],'quebra dela bebel 1 0 bibi perigosa');
+  const video={id:'aaaaaaaaaaa',snippet:{title:'QUEBRA DELA BEBEL 1.0 - BIBI PERIGOSA',channelTitle:'Bibi Perigosa'},contentDetails:{duration:'PT4M4S'},status:{embeddable:true,privacyStatus:'public'}};
+  assert.equal(chooseVideo(song,[video]),video.id);
+  assert.equal(chooseVideo(song,[{...video,snippet:{title:'QUEBRA DELA BEBEL 2.0 - BIBI PERIGOSA',channelTitle:'Bibi Perigosa'}}]),null);
+});

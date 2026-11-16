@@ -3,16 +3,17 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 
-function playerHarness(fetch) {
-  const nodes=new Map(), events=new Map(), videoPlayers=[], timers=new Map();let timerId=0;
+function playerHarness(fetch, {observeVideo=false}={}) {
+  const nodes=new Map(), events=new Map(), videoPlayers=[], timers=new Map(), observers=[];let timerId=0;
   const node=id=>{
     if(nodes.has(id))return nodes.get(id);
     const classes=new Set(), listeners=new Map();
-    const n={id,hidden:false,style:{setProperty(){}},listeners,classList:{add(...c){c.forEach(x=>classes.add(x))},remove(...c){c.forEach(x=>classes.delete(x))},contains(c){return classes.has(c)},toggle(c,value){const enabled=value??!classes.has(c);enabled?classes.add(c):classes.delete(c);return enabled}},setAttribute(){},removeAttribute(name){delete this[name]},append(){},replaceChildren(...children){this.children=children},addEventListener(name,fn){listeners.set(name,fn)}};
+    const n={id,hidden:false,style:{setProperty(){}},listeners,classList:{add(...c){c.forEach(x=>classes.add(x))},remove(...c){c.forEach(x=>classes.delete(x))},contains(c){return classes.has(c)},toggle(c,value){const enabled=value??!classes.has(c);enabled?classes.add(c):classes.delete(c);return enabled}},setAttribute(){},removeAttribute(name){delete this[name]},append(...children){(this.children??=[]).push(...children)},prepend(...children){this.children=[...children,...(this.children||[])]},replaceChildren(...children){this.children=children},addEventListener(name,fn){listeners.set(name,fn)}};
     nodes.set(id,n);return n;
   };
-  const context=vm.createContext({fetch,AbortSignal,URL,URLSearchParams,console,Response,Element:class {},location:{origin:'https://oggspotify.vercel.app'},navigator:{},window:{scrollTo(){}},matchMedia:()=>({matches:true}),setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId},clearTimeout(id){timers.delete(id)},setInterval(){},document:{hidden:true,body:node('body'),documentElement:node('html'),getElementById:node,createElement:()=>node(Symbol()),createElementNS:()=>node(Symbol()),addEventListener(name,fn){events.set(name,fn)}}});
+  const context=vm.createContext({fetch,AbortSignal,URL,URLSearchParams,console,Response,Element:class {},location:{origin:'https://oggspotify.vercel.app'},navigator:{},window:{scrollTo(){}},matchMedia:()=>({matches:true}),setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId},clearTimeout(id){timers.delete(id)},setInterval(){},document:{hidden:true,body:node('body'),documentElement:node('html'),getElementById:node,createElement:()=>node(Symbol()),createElementNS:()=>node(Symbol()),addEventListener(name,fn){events.set(name,fn)},querySelectorAll(){return []}}});
   context.window=context;
+  if(observeVideo)context.IntersectionObserver=class{constructor(callback){this.callback=callback;observers.push(this)}observe(target){this.target=target}unobserve(){}};
   context.YT={Player:class{
     constructor(id,options){this.options=options;this.plays=0;this.pauses=0;this.loaded=[];videoPlayers.push(this)}
     playVideo(){this.plays++;this.options.events.onStateChange({data:1})}
@@ -22,7 +23,7 @@ function playerHarness(fetch) {
   }};
   vm.runInContext(readFileSync('public/app.js','utf8'),context);
   vm.runInContext('onYouTubeIframeAPIReady()',context);
-  return {context,node,events,videoPlayers,timers,run:code=>vm.runInContext(code,context)};
+  return {context,node,events,videoPlayers,timers,observers,run:code=>vm.runInContext(code,context)};
 }
 const content=id=>JSON.stringify({uri:`spotify:track:${id}`,title:'Song'});
 const first='1111111111111111111111',second='2222222222222222222222';
@@ -48,10 +49,13 @@ test('a song change while the YouTube iframe initializes loads the latest song w
   const player=h.videoPlayers[0];player.options.events.onReady();
   assert.deepEqual(player.loaded,['bbbbbbbbbbb']);assert.equal(player.plays,1);
 });
-test('collapsing YouTube pauses it and does not retry after the visitor pauses',async()=>{
+test('compact controls keep the visible video playing and explicit pause is respected',async()=>{
   const h=playerHarness(()=>Promise.resolve(result('aaaaaaaaaaa')));
   await h.run(`selectContent(${content(first)})`);const player=h.videoPlayers[0];player.options.events.onReady();
   h.node('collapse-player').listeners.get('click')();
+  assert.equal(h.run('state.audible'),true);
+  assert.equal(h.node('inline-video-slot').hidden,false);
+  h.node('dock-play').listeners.get('click')();
   const plays=player.plays;h.run("unlockOnInteraction({isTrusted:true,type:'click',target:null})");
   assert.equal(h.run('state.wantsAudio'),false);assert.equal(h.run('state.audible'),false);assert.equal(player.plays,plays);assert.ok(player.pauses>0);
 });
@@ -188,4 +192,37 @@ test('playlist origin is linked when present and removed when playback leaves th
   assert.equal(h.node('owner-playlist-link').href,data.playlist.url);
   h.context.playback={...data,playlist:null};h.run('renderNow(playback)');
   assert.equal(h.node('owner-playlist').hidden,true);assert.equal(h.node('owner-playlist-name').textContent,'');
+});
+test('initial autoplay keeps the player compact in both providers',async()=>{
+  for(const provider of ['youtube','spotify']){
+    const h=playerHarness(()=>Promise.resolve(result(provider==='youtube'?'aaaaaaaaaaa':null)));
+    const spotify=attachSpotify(h);
+    await h.run("state.preferred='"+provider+"';selectContent("+content(first)+",{follow:true,automatic:true})");
+    if(provider==='youtube')h.videoPlayers[0].options.events.onReady();
+    assert.equal(h.node('player-dock').classList.contains('collapsed'),true);
+    assert.equal(h.run('state.audible'),true);
+    assert.equal(h.node('body').classList.contains('player-collapsed'),true);
+  }
+});
+test('YouTube waits for a visible video, resumes on return, and preserves deliberate pause',async()=>{
+  const h=playerHarness(()=>Promise.resolve(result('aaaaaaaaaaa')),{observeVideo:true});
+  await h.run('selectContent('+content(first)+',{follow:true,automatic:true})');
+  const player=h.videoPlayers[0];player.options.events.onReady();
+  assert.equal(player.plays,0);
+  const observer=h.observers.find(item=>item.target?.id==='inline-video-slot');
+  assert.ok(observer);
+  observer.callback([{isIntersecting:true,intersectionRatio:.8}]);assert.equal(player.plays,1);
+  observer.callback([{isIntersecting:false,intersectionRatio:0}]);assert.equal(h.run('state.audible'),false);assert.equal(h.run('state.wantsAudio'),true);
+  observer.callback([{isIntersecting:true,intersectionRatio:.8}]);assert.equal(player.plays,2);
+  h.node('dock-play').listeners.get('click')();
+  observer.callback([{isIntersecting:false,intersectionRatio:0}]);observer.callback([{isIntersecting:true,intersectionRatio:.8}]);
+  assert.equal(h.run('state.wantsAudio'),false);assert.equal(player.plays,2);
+});
+test('statistics clearly identify partial estimated minutes when full-history permission is absent',()=>{
+  const h=playerHarness(()=>Promise.resolve(result(null)));
+  h.context.stats={sampleSize:50,recentAvailability:'ready',periods:[{days:7,plays:12,estimatedMinutes:36,artists:[],tracks:[]}],top:{availability:'permission_required'}};
+  h.run('renderStats(stats)');
+  assert.equal(h.node('stats-minutes').textContent,'36');
+  assert.match(h.node('stats-context').textContent,/recorte/);
+  assert.match(h.node('stats-footnote').textContent,/Minutos exatos.*histórico completo/);
 });
