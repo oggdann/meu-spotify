@@ -9,13 +9,13 @@ const row = days => ({track,played_at:new Date(now-days*86400000).toISOString()}
 test('weekly and monthly samples deduplicate records and never claim exact listened minutes',()=>{
   const periods=summarizeRecent([row(1),row(1),row(9),row(35),{...row(1),played_at:'bad'},row(-1)],now);
   assert.equal(periods[0].plays,1);assert.equal(periods[1].plays,2);
-  assert.equal(periods[0].estimatedMinutes,3);assert.equal(periods[1].estimatedMinutes,6);
+  assert.equal(periods[0].minutes,null);assert.equal(periods[1].minutes,null);
   assert.equal(periods[1].tracks[0].count,2);assert.equal(periods[1].artists[0].count,2);
   assert.ok(periods.every(period=>period.sampleOnly&&!Object.hasOwn(period,'exactMinutes')));
 });
 test('empty periods have no fabricated ranking or playback records',()=>{
   const periods=summarizeRecent([],now);
-  assert.deepEqual(periods.map(period=>[period.plays,period.estimatedMinutes,period.tracks.length,period.artists.length]),[[0,0,0,0],[0,0,0,0]]);
+  assert.deepEqual(periods.map(period=>[period.plays,period.minutes,period.tracks.length,period.artists.length]),[[0,null,0,0],[0,null,0,0]]);
 });
 function scenario(body){
   const code="process.env.SPOTIFY_CLIENT_ID='id';process.env.SPOTIFY_CLIENT_SECRET='never-public-secret';process.env.SPOTIFY_REFRESH_TOKEN='never-public-refresh';const json=(data,status=200)=>new Response(JSON.stringify(data),{status});const calls=[];const response=()=>({code:200,headers:{},setHeader(k,v){this.headers[k]=v},status(n){this.code=n;return this},json(data){this.body=data;return this}});"+body;

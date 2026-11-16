@@ -218,11 +218,12 @@ test('YouTube waits for a visible video, resumes on return, and preserves delibe
   observer.callback([{isIntersecting:false,intersectionRatio:0}]);observer.callback([{isIntersecting:true,intersectionRatio:.8}]);
   assert.equal(h.run('state.wantsAudio'),false);assert.equal(player.plays,2);
 });
-test('statistics clearly identify partial estimated minutes when full-history permission is absent',()=>{
+test('statistics do not show a fake minute total without full listening history',()=>{
   const h=playerHarness(()=>Promise.resolve(result(null)));
   h.context.stats={sampleSize:50,recentAvailability:'ready',periods:[{days:7,plays:12,estimatedMinutes:36,artists:[],tracks:[]}],top:{availability:'permission_required'}};
   h.run('renderStats(stats)');
-  assert.equal(h.node('stats-minutes').textContent,'36');
+  assert.equal(h.node('stats-minutes').textContent,'—');
+  assert.match(h.node('stats-minutes-status').textContent,/Histórico completo/);
   assert.match(h.node('stats-context').textContent,/recorte/);
-  assert.match(h.node('stats-footnote').textContent,/Minutos exatos.*histórico completo/);
+  assert.match(h.node('stats-footnote').textContent,/Não representa o total completo/);
 });

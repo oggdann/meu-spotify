@@ -10,9 +10,7 @@ export function summarizeRecent(items, now = Date.now()) {
   return [7, 30].map(days => {
     const rows = [...unique.values()].filter(row => row.at >= now - days * 86400000);
     const tracks = new Map(), artists = new Map();
-    let duration = 0;
     for (const row of rows) {
-      duration += row.track.durationMs;
       const song = tracks.get(row.track.id) || { ...row.track, count: 0 };
       song.count++; tracks.set(song.id, song);
       for (const artist of row.artists) {
@@ -21,7 +19,7 @@ export function summarizeRecent(items, now = Date.now()) {
         entry.count++; artists.set(entry.id, entry);
       }
     }
-    return { days, plays: rows.length, estimatedMinutes: Math.round(duration / 60000), sampleOnly: true,
+    return { days, plays: rows.length, minutes: null, sampleOnly: true,
       oldestRecord: rows.length ? new Date(Math.min(...rows.map(row => row.at))).toISOString() : null,
       artists: [...artists.values()].sort((a, b) => b.count - a.count).slice(0, 5),
       tracks: [...tracks.values()].sort((a, b) => b.count - a.count).slice(0, 5) };

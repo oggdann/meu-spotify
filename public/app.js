@@ -515,7 +515,7 @@ function renderLibrary(data) {
   if (safeUrl(data.profile.image, true)) $('profile-image').src = data.profile.image;
   $('profile-image').alt = `Perfil de ${data.profile.name}`;
   $('playlist-count').textContent = data.availability?.playlists === 'ready' ? String(data.playlists.length) : '—';
-  $('playlists-note').textContent = data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Minhas playlists públicas. Sem pose, do meu jeito.';
+  $('playlists-note').textContent = data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Playlists públicas que eu criei. Abre no Spotify e salva a tua favorita.';
   renderPlaylists(); renderRecent();
 }
 $('playlist-search').addEventListener('input', () => { state.playlistLimit = 8; renderPlaylists(); });
@@ -546,7 +546,8 @@ function renderStats(data) {
   $('stats-week').setAttribute('aria-pressed', String(statsPeriod === 7));
   $('stats-month').setAttribute('aria-pressed', String(statsPeriod === 30));
   $('stats-plays').textContent = data.recentAvailability === 'ready' ? String(period?.plays || 0) : '—';
-  $('stats-minutes').textContent = data.recentAvailability === 'ready' ? String(period?.estimatedMinutes || 0) : '—';
+  $('stats-minutes').textContent = Number.isFinite(period?.minutes) ? String(period.minutes) : '—';
+  $('stats-minutes-status').textContent = Number.isFinite(period?.minutes) ? 'Tempo real informado no histórico' : 'Histórico completo ainda não disponível';
   const official = statsPeriod === 30 && data.top?.availability === 'ready';
   $('stats-context').textContent = official ? 'Rankings oficiais do Spotify · últimas 4 semanas. Os números abaixo continuam sendo do recorte recente.' : 'Últimos ' + statsPeriod + ' dias · recorte de até ' + (data.sampleSize || 50) + ' reproduções disponíveis.';
   for (const type of ['artists', 'tracks']) {
@@ -568,7 +569,7 @@ function renderStats(data) {
     });
     if (!entries.length) list.append(el('li', 'stats-empty', 'Sem registros neste recorte.'));
   }
-  $('stats-footnote').textContent = data.top?.availability === 'permission_required' ? 'O ranking completo de 4 semanas depende de liberar a leitura dos tops do Spotify. Minutos exatos da semana ou do mês precisam do histórico completo de escuta.' : 'Minutos exatos da semana ou do mês precisam do histórico completo de escuta. Aqui, as estimativas são identificadas.';
+  $('stats-footnote').textContent = official ? 'Rankings oficiais do Spotify para as últimas 4 semanas. Os minutos reais ainda aguardam o histórico completo.' : 'Base: últimas 50 reproduções informadas pelo Spotify. Não representa o total completo da semana ou do mês.';
 }
 $('stats-week').addEventListener('click', () => { statsPeriod = 7; if (listeningStats) renderStats(listeningStats); });
 $('stats-month').addEventListener('click', () => { statsPeriod = 30; if (listeningStats) renderStats(listeningStats); });

@@ -174,3 +174,4 @@ body.has-youtube.player-collapsed{padding-bottom:110px}
 }
 
 .player-collapsed .toast{bottom:112px}
+.stats-metrics small{display:block;font-size:9px;color:var(--muted);line-height:1.5;margin-top:7px}
