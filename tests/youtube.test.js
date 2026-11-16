@@ -25,6 +25,12 @@ test('a short collaboration search still validates title, credited artists and d
   assert.equal(chooseVideo(song,[actual]),actual.id);
   assert.equal(chooseVideo(song,[{...actual,snippet:{...actual.snippet,title:'MEGA FUNK SHOW ME LOVE - PETROSKI'}}]),null);
 });
+test('official topic audio may credit only the main artist in its title and channel', () => {
+  const song={title:'Mega Tropa do Jon',primaryArtist:'DJ Petroski',artist:'DJ Petroski, Dj Dudu, Mc Th, Jon Vlogs',durationMs:198764};
+  const audio={id:'SUjjJ74lj5A',snippet:{title:'Mega Tropa do Jon',channelTitle:'DJ Petroski - Topic'},contentDetails:{duration:'PT3M23S'},status:{embeddable:true,privacyStatus:'public'}};
+  assert.equal(chooseVideo(song,[audio]),audio.id);
+  assert.equal(chooseVideo(song,[{...audio,snippet:{title:'Mega Tropa do Jon',channelTitle:'DJ Different - Topic'}}]),null);
+});
 function scenario(code) {
   const r=spawnSync(process.execPath,['--input-type=module','-e',`
     const calls=[];const json=(data,status=200)=>new Response(JSON.stringify(data),{status});
