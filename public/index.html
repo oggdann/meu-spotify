@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101110">
+  <meta name="description" content="Entre na frequência do OGG. O que Daniel está ouvindo agora, suas playlists públicas e os últimos sons — tudo no mesmo lugar.">
+  <meta property="og:title" content="OGG • Minha frequência">
+  <meta property="og:description" content="A mesma música. Outro lugar. Ouça comigo e explore meu universo no Spotify.">
+  <meta property="og:image" content="https://oggspotify.vercel.app/assets/ogg-orbital.png">
+  <meta property="og:url" content="https://oggspotify.vercel.app/">
+  <meta property="og:type" content="website">
+  <title>OGG • Minha frequência</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://open.spotify.com">
+  <link rel="preconnect" href="https://embed-cdn.spotifycdn.com" crossorigin>
+  <link rel="preconnect" href="https://i.scdn.co" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M5 5h14v14"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5V4ZM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M15 8V4H4v11h4"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-spotify" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M6.5 9c4-1.3 7.5-1 11 1M7.5 12c3.3-1 6.5-.7 9.3 1M8.5 15c2.8-.7 5-.5 7.3.8" stroke="#101110" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  </defs></svg>
+  <a class="skip" href="#agora">Pular para a música</a>
+  <div class="ambient" id="ambient" aria-hidden="true"></div>
+  <header class="topbar wrap">
+    <a class="brand" href="#agora" aria-label="OGG — início"><img src="/assets/ogg-orbital.png" alt="OGG" width="1774" height="887"><span>MINHA FREQUÊNCIA<span class="brand-sub">por Daniel Victor</span></span></a>
+    <nav aria-label="Navegação principal"><a href="#agora" class="nav-link active">Agora</a><a href="#playlists" class="nav-link">Playlists</a><a href="#recentes" class="nav-link">Recentes</a></nav>
+    <button class="round-btn immersive-toggle" id="immersive" aria-label="Ativar modo imersivo" aria-pressed="false" title="Modo imersivo"><svg><use href="#i-moon"/></svg></button>
+  </header>
+  <main class="wrap">
+    <section class="hero" id="agora" aria-labelledby="hero-heading">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="tiny-star">✦</span> UM POUCO DO MEU UNIVERSO</div>
+        <h1 id="hero-heading">Entre na minha<br><em>frequência.</em><span class="heading-star" aria-hidden="true">✳</span></h1>
+        <p class="intro">Os sons que me encontram.<br>Quem sabe também te encontram.</p>
+        <div class="now-block">
+          <div class="live-label"><span class="live-dot" id="live-dot"></span><span id="owner-status" aria-live="polite">CONECTANDO AO SPOTIFY</span><span class="live-line"></span></div>
+          <h2 id="track-title" class="track-title">Preparando o som…</h2>
+          <p class="track-artist" id="track-artist">Já já a gente entra na mesma vibe.</p>
+          <div class="owner-progress"><div class="progress-track" id="owner-progress" role="progressbar" aria-label="Posição da música no Spotify do OGG" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-fill"></span></div><div class="progress-times"><span id="progress-time">0:00</span><span id="duration-time">0:00</span></div></div>
+          <div class="hero-actions"><button class="primary-btn" id="listen" disabled><svg><use id="listen-icon" href="#i-play"/></svg><span id="listen-label">Ouvir junto</span></button><button class="secondary-btn" id="share"><svg><use href="#i-copy"/></svg><span>Compartilhar</span></button></div>
+          <div class="audio-note" id="audio-note" role="status">A mesma faixa que eu ouço, no teu player.</div>
+        </div>
+      </div>
+      <div class="art-stage" id="art-stage">
+        <div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div>
+        <div class="orbit-word orbit-word-top" aria-hidden="true">OGG / ON REPEAT /</div>
+        <div class="cover-card" id="cover-card">
+          <div class="cover-image" id="cover-image"><img class="cover-logo" src="/assets/ogg-orbital.png" alt="" aria-hidden="true"><img id="album-art" alt="Capa do álbum" hidden></div>
+          <div class="cover-bottom"><span class="mono" id="cover-caption">FREQUÊNCIA PESSOAL</span><div class="mini-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div>
+        </div>
+        <div class="ogg-stamp"><img src="/assets/ogg-orbital.png" alt="Marca OGG" width="1774" height="887"></div>
+        <div class="art-caption"><span>BOA MÚSICA.<br>SEM MUITO ROTEIRO.</span><span class="edition">VOL. 001<br>BAHIA, BR</span></div>
+      </div>
+    </section>
+    <div class="frequency-strip" aria-hidden="true"><span>PERSONAL SOUND SELECTION</span><div id="spectrum" class="spectrum"></div><span>CURATED BY OGG ✦</span></div>
+    <section class="profile-band content-section" id="perfil" aria-label="Meu perfil no Spotify">
+      <div class="profile-avatar"><img id="profile-image" src="/assets/ogg-orbital.png" alt="Perfil de Daniel Victor" width="80" height="80"></div>
+      <div class="profile-copy"><span class="eyebrow">QUEM TÁ NO CONTROLE</span><h2 id="profile-name">Daniel Victor <span class="handle">/ ogg</span></h2><p>Minha coleção de momentos em forma de música.</p></div>
+      <a class="outline-btn profile-link" id="profile-link" href="https://open.spotify.com/" target="_blank" rel="noopener noreferrer"><svg><use href="#i-spotify"/></svg>Meu perfil no Spotify<svg class="small-icon"><use href="#i-arrow"/></svg></a>
+    </section>
+    <section class="library-section content-section" id="playlists" aria-labelledby="playlists-title">
+      <div class="section-heading"><div><span class="eyebrow">UMA VIBE PRA CADA MOMENTO</span><h2 id="playlists-title">Feitas pra <em>sentir.</em><span class="count" id="playlist-count">—</span></h2></div><label class="search-box"><svg><use href="#i-search"/></svg><input id="playlist-search" type="search" placeholder="Encontre uma playlist" aria-label="Buscar nas playlists públicas" autocomplete="off"></label></div>
+      <div id="playlists-grid" class="playlists-grid" aria-live="polite"><div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div></div>
+      <p class="section-note" id="playlists-note">Playlists públicas criadas por mim.</p>
+      <button class="more-btn" id="more-playlists" hidden>Mais playlists <span>↓</span></button>
+    </section>
+    <section class="recent-section content-section" id="recentes" aria-labelledby="recent-title">
+      <div class="section-heading"><div><span class="eyebrow">O QUE PASSOU POR AQUI</span><h2 id="recent-title">Últimos <em>sons.</em></h2></div><span class="history-label"><span class="live-dot"></span> DIRETO DO MEU SPOTIFY</span></div>
+      <div class="recent-list" id="recent-list" aria-live="polite"><p class="empty-state">Buscando as últimas faixas…</p></div>
+      <button class="more-btn" id="more-recent" hidden>Ver mais recentes <span>↓</span></button>
+    </section>
+    <footer class="footer content-section"><a href="#agora" aria-label="Voltar ao início"><img src="/assets/ogg-orbital.png" alt="OGG" width="1774" height="887"></a><p>De Daniel Victor.<br><span>Pra quem sente a música.</span></p><a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">@oggdann <svg><use href="#i-arrow"/></svg></a></footer>
+  </main>
+  <aside class="player-dock" id="player-dock" aria-label="Player Spotify" hidden>
+    <div class="dock-top"><div class="dock-heading"><svg><use href="#i-sound"/></svg><span id="player-context">OUVINDO COM OGG</span><span class="dock-state" id="player-state">Preparando player…</span></div><label class="follow-switch"><input type="checkbox" id="follow" checked><span class="switch-track"></span><span>Acompanhar trocas</span></label><button class="round-btn collapse-btn" id="collapse-player" aria-label="Recolher player" aria-expanded="true">⌄</button></div>
+    <div class="dock-body" id="dock-body"><div id="spotify-embed"></div><p class="player-disclaimer">Reprodução pelo Spotify. A disponibilidade da faixa completa depende da tua sessão e do navegador.</p></div>
+  </aside>
+  <div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>

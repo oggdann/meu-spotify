@@ -1,0 +1,1 @@
+{"name":"ogg-frequency","version":"2.0.0","private":true,"type":"module","scripts":{"dev":"node tools/dev.mjs","test":"node --test tests/*.test.js"},"engines":{"node":">=22"}}
