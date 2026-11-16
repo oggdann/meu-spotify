@@ -373,3 +373,5 @@ body .cover-card.has-video{animation:none!important;translate:none!important;tra
 .presence-entry{min-width:0;border-bottom:1px solid var(--line);padding-bottom:10px}
 .youtube-search-link{display:block;color:var(--accent);font-size:12px;line-height:1.6;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:10px}
 .youtube-search-link[hidden]{display:none}
+
+.presence-socials{display:flex;flex-wrap:wrap;gap:16px;font-size:11px;color:var(--accent);margin-top:7px}.presence-socials a{padding-block:7px}.guest-form input:disabled,.guest-form textarea:disabled{opacity:.55}.guest-form button:disabled{opacity:.65;cursor:default}

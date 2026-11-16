@@ -312,3 +312,17 @@ test('guest posting uses the local guest session and does not navigate to Spotif
   await h.run("presenceSession={guest:{id:'guest-one',csrf:'guest-csrf'}};guestAction()");
   assert.equal(payload.url,'/api/presenca?acao=convidado');assert.equal(payload.body.csrf,'guest-csrf');assert.equal(payload.body.comment,'Salve!');assert.match(h.node('guest-feedback').textContent,/tá no mural/);
 });
+test('a visitor with an active presence cannot submit repeatedly and can still remove it',async()=>{
+  let calls=0;const h=playerHarness(()=>{calls++;return Promise.resolve(publicJson({items:[]}))});
+  h.run("presenceSession={guest:{id:'guest-one',csrf:'csrf'}};renderPresence([{id:'guest-one',name:'One',source:'guest',presentAt:Date.now()}])");
+  assert.equal(h.node('guest-submit').disabled,true);assert.equal(h.node('guest-remove').hidden,false);assert.equal(h.node('guest-spotify-url').disabled,true);
+  await h.run('guestAction()');assert.equal(calls,0);
+  await h.run('guestAction(true)');assert.equal(calls,1);assert.equal(h.node('guest-submit').disabled,false);assert.equal(h.node('guest-remove').hidden,true);
+});
+test('unavailable statistics use visitor-facing copy and hide empty metric cards',()=>{
+  const h=playerHarness(()=>Promise.resolve(publicJson({})));
+  h.run("renderStats({recentAvailability:'quota_exceeded',periods:[],top:{availability:'quota_exceeded',artists:[],tracks:[]}})");
+  assert.equal(h.node('stats-metrics').hidden,true);assert.equal(h.node('stats-footnote').hidden,true);
+  assert.doesNotMatch(h.node('stats-context').textContent,/tu |você|Tentarei|zero/);
+  assert.equal(h.node('stats-artists').children[0].textContent,'Dados temporariamente indisponíveis.');
+});

@@ -14,3 +14,10 @@ test('a failed profile read is not cached as an empty wall',async()=>{
   let writes=0;const store=createSiteStore({now:()=>now,cache:{get:async()=>null,set:async()=>{writes++}},listing:async()=>[{pathname:'presence/one.json'}],read:async()=>{throw Error('temporary storage failure')}});
   await assert.rejects(store.presences(),/temporary storage failure/);assert.equal(writes,0);
 });
+test('one visitor has one active presence and a shared playlist does not count as someone else identity',async()=>{
+  const files=new Map();let writes=0;const store=createSiteStore({now:()=>now,cache:{get:async()=>null,set:async()=>{}},read:async key=>files.get(key),write:async(key,value)=>{writes++;files.set(key,{value})},listing:async()=>[...files.keys()].map(pathname=>({pathname})),remove:async key=>files.delete(key)});
+  const profile={id:'guest-one',name:'One',source:'guest',instagramUrl:'https://www.instagram.com/one/',spotifyUrl:'https://open.spotify.com/playlist/306AubstP6UatfIUhynAX8'};
+  await store.mark(profile,'one');await store.mark({...profile,comment:'repeat'},'one');assert.equal(writes,1);
+  await assert.rejects(store.mark({...profile,id:'guest-other'},'other'),error=>error.code==='profile_already_present');
+  await store.mark({...profile,id:'guest-two',instagramUrl:null},'two');assert.equal((await store.presences()).length,2);
+});

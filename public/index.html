@@ -20,8 +20,8 @@
   <link rel="preconnect" href="https://i.scdn.co" crossorigin>
   <link rel="preconnect" href="https://www.youtube.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=ogg-20261116-11">
-  <script src="/app.js?v=ogg-20261116-11" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=ogg-20261116-12">
+  <script src="/app.js?v=ogg-20261116-12" defer></script>
 </head>
 <body>
   <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -104,7 +104,8 @@
         <form id="guest-form" class="guest-form">
           <label for="guest-name">Teu nome<input id="guest-name" name="name" autocomplete="nickname" maxlength="60" minlength="2" required placeholder="Como tu quer aparecer"></label>
           <label for="guest-comment">Teu salve <span>opcional</span><textarea id="guest-comment" name="comment" maxlength="280" rows="3" placeholder="Deixa um comentário…"></textarea></label>
-          <label for="guest-url">Link do teu perfil <span>opcional</span><input id="guest-url" name="url" type="url" inputmode="url" maxlength="2048" placeholder="https://instagram.com/teuperfil"></label>
+          <label for="guest-url">Teu Instagram <span>opcional</span><input id="guest-url" name="instagramUrl" type="url" inputmode="url" maxlength="2048" placeholder="https://instagram.com/teuperfil"></label>
+          <label for="guest-spotify-url">Teu Spotify <span>perfil ou playlist · opcional</span><input id="guest-spotify-url" name="spotifyUrl" type="url" inputmode="url" maxlength="2048" placeholder="https://open.spotify.com/user/… ou /playlist/…"></label>
           <div class="guest-trap" aria-hidden="true"><label>Website<input id="guest-website" name="website" tabindex="-1" autocomplete="off"></label></div>
           <div class="presence-actions"><button class="primary-btn" id="guest-submit" type="submit">Deixar minha presença ↗</button><button class="presence-text-btn" id="guest-remove" type="button" hidden>Remover minha presença</button></div>
           <p id="guest-feedback" class="presence-feedback" role="status"></p>
@@ -116,7 +117,7 @@
         <div class="presence-session" id="presence-session" hidden><div class="presence-account"><img id="presence-user-image" alt="" width="40" height="40" hidden><p id="presence-greeting"></p></div><div class="presence-actions"><button class="primary-btn" id="presence-mark">Marcar minha presença</button><button class="presence-text-btn" id="presence-remove" hidden>Remover do mural</button><a class="presence-text-btn" href="/api/presenca?acao=entrar">Conferir / trocar conta</a><button class="presence-text-btn" id="presence-logout">Sair</button></div></div>
         <p class="presence-browser-note">A conexão Spotify é opcional e está limitada a contas de teste. O formulário acima é aberto a todos.</p>
         <p class="presence-privacy">Só teu nome, foto e link do perfil aparecem, depois que tu confirmar. Nenhuma playlist ou histórico teu é publicado.</p>
-        </details><p class="presence-privacy">Só aparece o que tu enviar. Perfis informados sem login não são verificados. O mural mostra os últimos 30 dias; tu pode remover tua presença neste mesmo navegador.</p>
+        </details><p class="presence-privacy">Uma presença por visitante neste navegador. Tu pode deixar Instagram e Spotify juntos. Links informados sem login não são verificados. O mural mostra os últimos 30 dias; tu pode remover tua presença neste mesmo navegador.</p>
       </div>
     </section>
     <footer class="footer content-section"><a href="#agora" aria-label="Voltar ao início"><img src="/assets/ogg-orbital.png" alt="OGG" width="1774" height="887"></a><p>Criado por Daniel Victor.<br><span>@oggdann / Feito do meu jeito.</span></p><a href="https://www.instagram.com/oggdann/" target="_blank" rel="noopener noreferrer">Meu Instagram <svg><use href="#i-arrow"/></svg></a></footer>

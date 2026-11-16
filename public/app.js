@@ -623,7 +623,10 @@ function renderStats(data) {
   $('stats-week').setAttribute('aria-pressed', String(statsPeriod === 7));
   $('stats-month').setAttribute('aria-pressed', String(statsPeriod === 30));
   const official = statsPeriod === 30 && ['ready', 'stale'].includes(data.top?.availability);
-  $('stats-metrics').hidden = official;
+  const recentReady = ['ready', 'stale'].includes(data.recentAvailability);
+  const statsReady = official || recentReady;
+  $('stats-metrics').hidden = official || !recentReady;
+  $('stats-disclosure').hidden = $('stats-footnote').hidden = !statsReady;
   $('stats-plays').textContent = ['ready', 'stale'].includes(data.recentAvailability) ? format(period?.plays) : '—';
   $('stats-track-count').textContent = ['ready', 'stale'].includes(data.recentAvailability) && Number.isInteger(period?.trackCount) ? format(period.trackCount) : '—';
   $('stats-plays-status').textContent = 'Até ' + (data.sampleSize || 50) + ' registros disponíveis';
@@ -647,10 +650,10 @@ function renderStats(data) {
       if (!official) row.append(el('span', 'stats-rank-count', String(item.count) + '×'));
       list.append(row);
     });
-    if (!entries.length) list.append(el('li', 'stats-empty', (statsPeriod === 30 ? data.top?.availability : data.recentAvailability) === 'ready' ? 'Sem registros neste recorte.' : 'O Spotify não liberou estes dados agora. Tentarei atualizar automaticamente.'));
+    if (!entries.length) list.append(el('li', 'stats-empty', (statsPeriod === 30 ? data.top?.availability : data.recentAvailability) === 'ready' ? 'Sem registros neste recorte.' : 'Dados temporariamente indisponíveis.'));
   }
   if ((official ? data.top?.availability : data.recentAvailability) === 'stale') $('stats-context').textContent += ' Exibindo a última atualização disponível.';
-  else if (!(official || ['ready', 'stale'].includes(data.recentAvailability))) $('stats-context').textContent = 'Estatísticas temporariamente indisponíveis no Spotify. Isso não significa que tu ouviu zero músicas.';
+  else if (!(official || ['ready', 'stale'].includes(data.recentAvailability))) $('stats-context').textContent = 'Estatísticas temporariamente indisponíveis.';
   $('stats-footnote').textContent = (official ? '' : 'Base do ranking: últimas 50 reproduções. Não cobre necessariamente o período inteiro. ') + 'O total de minutos ouvidos mostrado no aplicativo não é disponibilizado pela conexão oficial do Spotify.';
 }
 $('stats-week').addEventListener('click', () => { statsPeriod = 7; if (listeningStats) renderStats(listeningStats); });
@@ -659,7 +662,7 @@ async function pollStats() {
   clearTimeout(statsTimer); if (document.hidden) return;
   let retry = 300000;
   try { const data = await getJson('/api/estatisticas'); retry = Math.max(retry, (data.retryAfter || 0) * 1000); renderStats(data); }
-  catch (error) { retry = Math.max(retry, error.retryAfter * 1000); $('stats-context').textContent = 'Os números estão indisponíveis agora. O som continua.'; }
+  catch (error) { retry = Math.max(retry, error.retryAfter * 1000); $('stats-context').textContent = 'Estatísticas temporariamente indisponíveis.'; }
   finally { statsTimer = setTimeout(pollStats, Math.min(retry, 2147483647)); }
 }
 function renderPresence(items) {
@@ -678,11 +681,20 @@ function renderPresence(items) {
     const entry = el('article', 'presence-entry'); entry.append(link);
     if (person.source === 'guest') copy.append(el('small', '', 'Visitante · perfil informado'));
     if (person.comment) entry.append(el('p', 'presence-comment', person.comment));
+    if (person.source === 'guest') {
+      const links = el('div', 'presence-socials');
+      for (const [value, label, host] of [[person.instagramUrl,'Instagram ↗','www.instagram.com'],[person.spotifyUrl,person.spotifyUrl?.includes('/playlist/') ? 'Playlist ↗' : 'Spotify ↗','open.spotify.com']]) {
+        try { const parsed = new URL(value); if (parsed.protocol !== 'https:' || parsed.hostname !== host || parsed.username || parsed.password) continue;
+          const social = el('a', '', label); social.href = parsed.href; social.target = '_blank'; social.rel = 'noopener noreferrer nofollow ugc'; links.append(social);
+        } catch {}
+      }
+      entry.append(links);
+    }
     wall.append(entry);
   }
   if (!presenceItems.length) wall.append(el('p', 'presence-empty', 'O mural tá aberto. O próximo nome pode ser o teu.'));
   const mine = presenceItems.some(item => item.id === presenceSession?.profile?.id);
-  $('guest-remove').hidden = !presenceItems.some(item => item.id === presenceSession?.guest?.id);
+  updateGuestControls();
   $('presence-remove').hidden = !mine;
   $('presence-mark').textContent = mine ? 'Minha presença tá marcada' : 'Marcar minha presença';
 }
@@ -694,8 +706,7 @@ async function pollPresence() {
   const accountReady = jobs[1].status === 'fulfilled';
   if (accountReady) {
     presenceSession = jobs[1].value;
-    $('guest-submit').disabled = !presenceSession.guest;
-    $('guest-remove').hidden = !presenceItems.some(item => item.id === presenceSession.guest?.id);
+    updateGuestControls();
     const signedIn = Boolean(presenceSession.profile);
     $('presence-login').hidden = signedIn || !presenceSession.enabled;
     $('presence-session').hidden = !signedIn;
@@ -756,21 +767,28 @@ async function presenceAction(action) {
   finally { presenceBusy = false; $('presence-mark').disabled = $('presence-remove').disabled = $('presence-logout').disabled = false; }
 }
 let guestBusy = false;
+function updateGuestControls() {
+  const marked = presenceItems.some(item => item.id === presenceSession?.guest?.id);
+  $('guest-submit').disabled = guestBusy || marked || !presenceSession?.guest;
+  $('guest-submit').textContent = marked ? 'Tua presença já tá marcada' : 'Deixar minha presença ↗';
+  $('guest-remove').hidden = !marked; $('guest-remove').disabled = guestBusy;
+  for (const id of ['guest-name','guest-comment','guest-url','guest-spotify-url']) $(id).disabled = marked || guestBusy;
+}
 async function guestAction(remove = false) {
-  if (guestBusy) return;
+  if (guestBusy || (!remove && presenceItems.some(item => item.id === presenceSession?.guest?.id))) return;
   guestBusy = true; $('guest-submit').disabled = $('guest-remove').disabled = true;
   try {
     if (!presenceSession?.guest) await pollPresence();
     if (!presenceSession?.guest) throw new Error('session');
-    const body = { csrf:presenceSession.guest.csrf, name:$('guest-name').value, comment:$('guest-comment').value, url:$('guest-url').value, website:$('guest-website').value };
+    const body = { csrf:presenceSession.guest.csrf, name:$('guest-name').value, comment:$('guest-comment').value, instagramUrl:$('guest-url').value, spotifyUrl:$('guest-spotify-url').value, website:$('guest-website').value };
     const response = await fetch('/api/presenca?acao=' + (remove ? 'remover-convidado' : 'convidado'), { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal:AbortSignal.timeout(12000) });
     if (!response.ok) throw Object.assign(new Error('unavailable'), {status:response.status});
     const data = await response.json(); renderPresence(data.items);
     $('guest-feedback').textContent = remove ? 'Tua presença saiu do mural.' : 'Teu salve tá no mural. Valeu por colar!';
     if (!remove) $('guest-comment').value = '';
   } catch (error) {
-    $('guest-feedback').textContent = error.status === 429 ? 'Muitos envios por agora. Tenta de novo mais tarde.' : error.status === 400 ? 'Confere teu nome e o link completo começando com https://. O comentário pode ter até 280 caracteres.' : 'Não consegui salvar agora. Atualiza a página e tenta novamente.';
-  } finally { guestBusy = false; $('guest-submit').disabled = $('guest-remove').disabled = false; }
+    $('guest-feedback').textContent = error.status === 429 ? 'Muitos envios por agora. Tenta de novo mais tarde.' : error.status === 409 ? 'Esse perfil já deixou presença no mural. Não vou duplicar o mesmo perfil.' : error.status === 400 ? 'Confere teu nome e os links completos do Instagram ou Spotify. O comentário pode ter até 280 caracteres.' : 'Não consegui salvar agora. Atualiza a página e tenta novamente.';
+  } finally { guestBusy = false; updateGuestControls(); }
 }
 $('guest-form').addEventListener('submit', event => { event.preventDefault(); guestAction(); });
 $('guest-remove').addEventListener('click', () => guestAction(true));

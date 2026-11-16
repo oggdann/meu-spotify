@@ -1,13 +1,14 @@
 import { cacheInfo, cached, getToken, imageUrl, publicTrack, readOnly, sendFailure, spotifyGet, spotifyUrl } from '../lib/spotify.js';
 import {featuredPlaylists} from '../lib/featured-playlists.js';
+import {ownerPhoto} from '../lib/owner-photo.js';
 
 export default async function handler(req, res) {
   if (!readOnly(req, res)) return;
   try {
     const data = await cached('library', 300000, async () => {
-      const owner = await spotifyGet('/me').catch(() => ({id:'dq78sjzflg084c1ibpjuo8gjc',display_name:'ogg',external_urls:{spotify:'https://open.spotify.com/user/dq78sjzflg084c1ibpjuo8gjc'}}));
+      const [owner,photo] = await Promise.all([spotifyGet('/me').catch(() => ({id:'dq78sjzflg084c1ibpjuo8gjc',display_name:'ogg',external_urls:{spotify:'https://open.spotify.com/user/dq78sjzflg084c1ibpjuo8gjc'}})),ownerPhoto()]);
       if (!owner?.id) throw new Error('Profile unavailable');
-      const profile = { id: owner.id, name: String(owner.display_name || 'Daniel Victor'), image: imageUrl(owner.images?.[0]?.url), url: spotifyUrl(owner.external_urls?.spotify), followers: Number(owner.followers?.total) || 0 };
+      const profile = { id: owner.id, name: String(owner.display_name || 'Daniel Victor'), image: photo?.image || imageUrl(owner.images?.[0]?.url), url: spotifyUrl(owner.external_urls?.spotify), followers: Number(owner.followers?.total) || 0 };
       const [playlists, recent] = await Promise.allSettled([
         featuredPlaylists(),
         (async()=>{const token=await getToken();if(token.scopes&&!token.scopes.has('user-read-recently-played'))throw {code:'permission_required'};return spotifyGet('/me/player/recently-played?limit=50');})()

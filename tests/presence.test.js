@@ -89,3 +89,9 @@ test('guest can post and remove only their own presence without Spotify calls; C
   const removed=response();await h(req('remover-convidado',{method:'POST',headers,body:{...body,id:'someone-else'}}),removed);assert.equal(removed.code,200);assert.deepEqual(removed.body.items,[]);
   assert.equal(upstream,0);assert.equal(writes[0].profile.id,me.body.guest.id);
 });
+test('visitors can share Instagram and a Spotify profile or playlist together without tracking parameters',()=>{
+  const both=guestProfile({name:'Visitante',instagramUrl:'https://instagram.com/OGGDANN/?igsh=tracking',spotifyUrl:'https://open.spotify.com/playlist/306AubstP6UatfIUhynAX8?si=tracking'},'id');
+  assert.equal(both.instagramUrl,'https://www.instagram.com/oggdann/');assert.equal(both.spotifyUrl,'https://open.spotify.com/playlist/306AubstP6UatfIUhynAX8');
+  assert.equal(guestProfile({name:'Visitante',spotifyUrl:'https://open.spotify.com/user/ogg'},'id').spotifyUrl,'https://open.spotify.com/user/ogg');
+  for(const link of ['https://instagram.com.evil.example/ogg','https://instagram.com/p/post/','https://example.com/user','https://open.spotify.com/track/306AubstP6UatfIUhynAX8'])assert.equal(guestProfile({name:'Visitante',url:link},'id'),null);
+});
