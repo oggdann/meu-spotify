@@ -672,7 +672,11 @@ function presenceCard(person) {
     if (guestUrl) { link.href = guestUrl; link.target = '_blank'; link.rel = 'noopener noreferrer nofollow ugc'; }
     link.className = 'presence-person';
     const avatar = el('span', 'presence-avatar', (person.name || '?').slice(0, 1).toUpperCase());
-    if (safeUrl(person.image, true)) { const image = el('img'); image.src = person.image; image.alt = ''; image.width = image.height = 40; image.loading = 'lazy'; avatar.replaceChildren(image); }
+    const previews=person.previews||[],instagram=previews.find(p=>p.url===person.instagramUrl&&p.provider==='Instagram'),spotify=previews.find(p=>p.url===person.spotifyUrl&&p.provider==='Spotify');
+    const candidates=[...new Set([instagram?.image,spotify?.type==='profile'?spotify.image:null,spotify?.type==='playlist'?spotify.creator?.image:null,...(person.imageCandidates||[]),person.image,spotify?.type==='playlist'?spotify.image:null].map(value=>safeUrl(value,true)).filter(Boolean))];
+    const image=el('img');image.alt='';image.width=image.height=40;image.loading='lazy';image.referrerPolicy='no-referrer';
+    let avatarIndex=0;const nextAvatar=()=>{image.src=candidates[avatarIndex++]||'/assets/visitor-avatar.svg';if(avatarIndex>candidates.length)image.onerror=null;};
+    image.onerror=nextAvatar;nextAvatar();avatar.replaceChildren(image);
     const copy = el('span', 'presence-person-copy'); copy.append(el('strong', '', person.name), el('small', '', relativeTime(person.presentAt)));
     const postedAt = new Date(person.presentAt);
     if (Number.isFinite(postedAt.getTime())) {

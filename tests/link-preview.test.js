@@ -33,3 +33,31 @@ test('both social links retain separate usable previews when metadata is blocked
  const result=await guestLinkPreviews({instagramUrl:'https://www.instagram.com/link_fallback_both/',spotifyUrl:'https://open.spotify.com/user/metadata_fallback_both'});
  assert.equal(result.length,2);assert.deepEqual(result.map(r=>r.provider),['Instagram','Spotify']);assert.ok(result.every(r=>r.url&&r.metadataAvailable===false));
 });
+
+test('playlist creator links are accepted only from a public Spotify user URL',()=>{
+ const url='https://open.spotify.com/playlist/7777777777777777777777';
+ const page='<meta property="og:title" content="Playlist"><meta name="music:creator" content="https://open.spotify.com/user/public_owner">';
+ assert.equal(parseLinkMetadata(page,url).creator.url,'https://open.spotify.com/user/public_owner');
+ for(const unsafe of ['https://evil.example/user/public_owner','https://open.spotify.com/user/public_owner?redirect=1','https://x:pw@open.spotify.com/user/public_owner'])
+ assert.equal(parseLinkMetadata(page.replace('https://open.spotify.com/user/public_owner',unsafe),url).creator,undefined);
+});
+test('playlist previews resolve the creator photo from a cached public profile without Spotify authorization',async()=>{
+ const url='https://open.spotify.com/playlist/8888888888888888888888',owner='https://open.spotify.com/user/avatar_playlist_owner';
+ const calls=[];globalThis.fetch=async(u,options)=>{calls.push(u);assert.equal(options.redirect,'error');assert.equal(options.headers?.Authorization,undefined);return new Response(u===url?'<meta property="og:title" content="Mix"><meta property="og:image" content="https://i.scdn.co/image/playlist"><meta name="music:creator" content="'+owner+'">':'<meta property="og:title" content="Creator"><meta property="og:image" content="https://i.scdn.co/image/creator">');};
+ const first=await linkPreview(url),second=await linkPreview(url);
+ assert.equal(first.creator.image,'https://i.scdn.co/image/creator');assert.equal(first.details.author,'Creator');assert.deepEqual(calls,[url,owner]);assert.deepEqual(second,first);
+});
+test('comment avatars prefer Instagram, Spotify profile, playlist creator and then cover with only safe image hosts',async()=>{
+ const {commentImageCandidates}=await import('../lib/link-preview.js');
+ const row={instagramUrl:'https://www.instagram.com/avatar_priority/',spotifyUrl:'https://open.spotify.com/playlist/9999999999999999999999',image:'https://i.scdn.co/image/existing',previews:[{provider:'Instagram',url:'https://www.instagram.com/avatar_priority/',image:'https://scontent.cdninstagram.com/photo.jpg'},{provider:'Spotify',url:'https://open.spotify.com/playlist/9999999999999999999999',type:'playlist',creator:{image:'https://i.scdn.co/image/creator'},image:'https://i.scdn.co/image/cover'}]};
+ assert.deepEqual(commentImageCandidates(row),['https://scontent.cdninstagram.com/photo.jpg','https://i.scdn.co/image/creator','https://i.scdn.co/image/existing','https://i.scdn.co/image/cover']);
+ row.previews[0].image='https://evil.example/fake.jpg';row.previews[1].type='profile';
+ assert.deepEqual(commentImageCandidates(row),['https://i.scdn.co/image/cover','https://i.scdn.co/image/existing']);
+});
+test('old comments gain avatars on read with bounded metadata requests and keep their original text',async()=>{
+ const {enrichCommentProfiles}=await import('../lib/link-preview.js');let calls=0;
+ globalThis.fetch=async u=>{calls++;return new Response('<meta property="og:title" content="Public profile"><meta property="og:image" content="https://i.scdn.co/image/old-person">');};
+ const rows=Array.from({length:4},(_,i)=>({id:'legacy-'+i,name:'Guest '+i,comment:'Original '+i,spotifyUrl:'https://open.spotify.com/user/avatar_legacy_'+i}));
+ await enrichCommentProfiles(rows);assert.equal(calls,2);assert.equal(rows[0].image,'https://i.scdn.co/image/old-person');assert.equal(rows[0].comment,'Original 0');
+ await enrichCommentProfiles(rows);assert.equal(calls,4);assert.ok(rows.every(r=>r.image==='https://i.scdn.co/image/old-person'));assert.equal(rows[3].name,'Guest 3');
+});

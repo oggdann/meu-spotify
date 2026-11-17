@@ -340,3 +340,17 @@ test('wall shows the posting date in Bahia and the public playlist preview',()=>
   assert.equal(date.dateTime,'2026-11-16T19:00:00.000Z');assert.match(date.textContent,/16\/11\/2026/);assert.match(date.textContent,/04:00|4:00/);
   const preview=entry.children.find(n=>n.className==='presence-preview');assert.equal(preview.href,'https://open.spotify.com/playlist/1111111111111111111111');assert.match(preview.rel,/ugc/);
 });
+
+test('comment avatars retry Spotify when an Instagram photo fails, then use a local fallback',()=>{
+ const h=playerHarness(async()=>new Response('{}'));
+ h.context.avatarPerson={name:'Visitor',source:'guest',presentAt:Date.now(),instagramUrl:'https://www.instagram.com/retry_avatar/',spotifyUrl:'https://open.spotify.com/user/retry_avatar',previews:[{provider:'Instagram',url:'https://www.instagram.com/retry_avatar/',type:'profile',image:'https://scontent.cdninstagram.com/first.jpg'},{provider:'Spotify',url:'https://open.spotify.com/user/retry_avatar',type:'profile',image:'https://i.scdn.co/image/second'}]};
+ const entry=h.run('presenceCard(avatarPerson)'),image=entry.children[0].children[0].children[0];
+ assert.equal(image.src,'https://scontent.cdninstagram.com/first.jpg');assert.equal(image.referrerPolicy,'no-referrer');
+ image.onerror();assert.equal(image.src,'https://i.scdn.co/image/second');
+ image.onerror();assert.equal(image.src,'/assets/visitor-avatar.svg');assert.equal(image.onerror,null);
+});
+test('comments without public profile photos always render a local avatar',()=>{
+ const h=playerHarness(async()=>new Response('{}'));h.context.avatarPerson={name:'No links',source:'guest',presentAt:Date.now()};
+ const entry=h.run('presenceCard(avatarPerson)'),image=entry.children[0].children[0].children[0];
+ assert.equal(image.src,'/assets/visitor-avatar.svg');assert.equal(image.onerror,null);
+});
