@@ -53,3 +53,32 @@ A pedido do Dan (“tente de todo jeito” / continuar enquanto dorme), foram te
 NoChrome conectado, o perfil davi_makenzy_ mostrou foto e cabeçalho com621seguidores/537seguindo; isto confirma que dados visíveis na sessão NÃO significam que obackend público consiga importá-los. Não copiar cookies doInstagram para servidor/provedor e não alegar automação de dados a partir dessa leitura manual.
 Foi preparado fallback opcional exclusivamente no servidor viaMicrolink com MICROLINK_API_KEY (ausente, portanto INATIVO). Consulta somente URLcanônicaInstagram permitida, chave só emheaderparaendpointfixopro.microlink.io, negaoutrasorigens, rejeitalogin/perfil diferente/logo genérica, aproveitaapenas metadadosreais, preservaabreviações e respeita429/Retry-Aftercomcooldown. Cachev5. Configurarchave/comercializaçãoouaprovarintegraçãoMeta ainda depende doDan; NÃO ativarplano pago nem assinartermos semautorização.
 Teste adicional doadaptador eescopodeURLs passou; suíte completa final135testes. O acesso real dedono foi comprovado noChrome em16/16comentários, comediçãode links/texto abertaecanceladasemmudarregistros. Não reimplantar autofixação nem prévias grandes em respostas.
+
+## Revisão de 17/11/2026 — recuperação do YouTube e faixa relatada
+A versão de produção conferida no início era027df794d5ecc64a31fee6702bff68ee7f301211, com implantaçãoREADY. As funções já concluídas do mural, acesso do criador, layout, links, avatares e players foram preservadas.
+
+### Dados reais conferidos
+- Música atual200: “Outfit Valioso”, com contextoSUPRASSUMO, capa e link da playlist.
+- Biblioteca200: SUPRASSUMO eEu Sei Das Coisa, ambas com capas reais; foto do perfil disponível; histórico ready com50reproduções.
+- Estatísticas200: recentAvailability e top.availability ready, amostra50, retryAfter0. exactMinutesAvailability permanece not_provided_by_spotify_api. Recortes recentes não representam histórico completo; não foram criados totais fictícios.
+- Mural200:16registros, sem criação de comentário de teste nem modificação de conteúdo de visitantes.
+- YouTube deixou de retornar youtube_rate_limited na amostra. Isso comprova recuperação observada, não garante que novas cotas nunca sejam atingidas.
+
+### Amostra real pequena, sem áudio no computador de Dan
+| Faixa | Resultado do resolvedor | Vídeo | Evidência adicional |
+| --- | --- | --- | --- |
+| Outfit Valioso | title_artist_duration | GBzhdLPxWoc | oEmbed200, título/artistascompatíveis |
+| Last Night on Earth — Green Day | title_artist_duration | oVZg-WwgivI | oEmbed200, Warner Music Thailand |
+| We Are The People — The Shapeshifters Vocal Remix | title_artist_duration | Y1jEPr0p-Gg | oEmbed200, nome da versão remix preservado |
+| Melô a vida tá demais — Deson Melo | title_artist_duration na execução de manutenção | XKbsBTy-91k | Topic do artista, distribuiçãoDistroKid, público/incorporável/permitidoBR,1:45 |
+
+OSpotify identificou a faixa problemática como0iJegPYlXgSQFBINaaVssM, duração104902ms (1:44,9). Ela já não estava entre as50recentes do site; a conferência usou o mesmo resolvedor em manutenção, sem abrir o endpoint público para buscas arbitrárias. A YouTubeDataAPI confirmou Melô a vida tá demais no canal“deson melo - Topic”, ID XKbsBTy-91k, duraçãoPT1M45S, statuspublic eembeddable, Brasil na lista permitida, e descrição“Provided to YouTube by DistroKid”. Link: https://www.youtube.com/watch?v=XKbsBTy-91k .
+
+### Alteração mínima e testes
+Adicionada somente essa correspondência validada ao mapa existente verifiedVideos. Essa faixa agora dispensa nova pesquisa noGoogle e não fica dependente da cota de busca; as regras gerais de título/artista/duração/versão/região continuam inalteradas. Dois testes novos verificam o registroTopic, rejeição de velocidade/BR bloqueado e resposta pública sem qualquer chamada aoSpotify/YouTube quando provedores estão indisponíveis. Total137testesNodeaprovados; gitdiff--check sem erros.
+Os IDs dinâmicos das outras três faixas continuam usando o cache compartilhado existente; não foi ampliado o número de consultas nem removida a proteção do buscador público. Nenhum segredo foi gravado no código ou relatório. Nenhum componente foi instalado noPC.
+
+### Limites e pendências
+Não houve reprodução de áudio noChrome pessoal enquanto Dan dormia, nem teste realSafari/iPhone/navegadorInstagram nesta rodada. Metadados, filtro de incorporação/região e oEmbed não comprovam autoplay audível no navegador.
+A importação completa e automática dos metadadosInstagram continua pendente de chave/fonteautorizada; o adaptador opcional permanece inativo semMICROLINK_API_KEY. Os bloqueios302/429 e a exigência dePro já foram diagnosticados antes; não foram repetidos nem houve assinatura/conta paga/transferência de cookies. Fotos públicas não fornecidas continuam comfallback; prioridadeInstagram e segundaopçãoSpotify preservadas.
+O commit e a implantação finais desta rodada ficam registrados no relatórioOGG_Relatorio_YouTube_2026-11-16.md da conversa após concluir a publicação.
