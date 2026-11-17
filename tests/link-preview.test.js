@@ -83,3 +83,20 @@ test('Instagram public metadata retains exact followers, following and posts wit
  const row=parseLinkMetadata('<meta property="og:title" content="Public name"><meta property="og:image" content="https://scontent.cdninstagram.com/pic.jpg"><meta property="og:description" content="300 Followers, 100 Following, 12 Posts - My bio">','https://www.instagram.com/public_metadata_test/');
  assert.equal(row.details.followers,300);assert.equal(row.details.posts,12);assert.equal(row.image,'https://scontent.cdninstagram.com/pic.jpg');
 });
+
+test('an authorized metadata provider is inactive without a key and rejects unrelated or login profiles',async()=>{
+ const {instagramProviderPreview,parseInstagramProvider}=await import('../lib/link-preview.js');delete process.env.MICROLINK_API_KEY;
+ let calls=0;globalThis.fetch=async()=>{calls++;throw Error('must not call')};assert.equal(await instagramProviderPreview('https://www.instagram.com/provider_test/'),null);assert.equal(calls,0);
+ const good={url:'https://www.instagram.com/provider_test/',title:'Real Name (@provider_test) • Instagram',description:'621 Followers, 537 Following, 1 Posts - Bio',image:{url:'https://scontent.cdninstagram.com/photo.jpg'}};
+ const parsed=parseInstagramProvider(good,good.url);assert.equal(parsed.details.followers,621);assert.equal(parsed.image,good.image.url);assert.equal(parseInstagramProvider({...good,image:{url:'https://static.cdninstagram.com/rsrc.php/logo.png'}},good.url).image,null);
+ assert.equal(parseInstagramProvider({...good,url:'https://www.instagram.com/accounts/login/'},good.url),null);
+ assert.equal(parseInstagramProvider({...good,title:'Other (@other_person)'},good.url),null);
+ assert.equal(parseInstagramProvider({...good,url:'https://evil.example/provider_test/'},good.url),null);
+});
+test('the provider keeps its key in a server header, validates identity and respects rate-limit pauses',async()=>{
+ const {instagramProviderPreview}=await import('../lib/link-preview.js');process.env.MICROLINK_API_KEY='test-provider-only';let calls=0;
+ globalThis.fetch=async(u,options)=>{calls++;assert.equal(u.origin,'https://pro.microlink.io');assert.equal(options.headers['x-api-key'],'test-provider-only');assert.equal(options.headers.Cookie,undefined);assert.doesNotMatch(u.href,/test-provider-only/);return new Response(JSON.stringify({status:'success',data:{url:u.searchParams.get('url'),title:'Name (@provider_success)',description:'10 Followers, 3 Following, 2 Posts',image:{url:'https://scontent.cdninstagram.com/photo.jpg'}}}));};
+ for(const bad of ['https://evil.example/','https://www.instagram.com/provider_success/?redirect=http://127.0.0.1','http://www.instagram.com/provider_success/','https://u:p@www.instagram.com/provider_success/'])assert.equal(await instagramProviderPreview(bad),null);assert.equal(calls,0);
+ assert.equal((await instagramProviderPreview('https://www.instagram.com/provider_success/')).details.followers,10);
+ globalThis.fetch=async()=>{calls++;return new Response('{}',{status:429,headers:{'Retry-After':'90'}});};assert.equal(await instagramProviderPreview('https://www.instagram.com/provider_limited/'),null);assert.equal(await instagramProviderPreview('https://www.instagram.com/provider_limited_again/'),null);assert.equal(calls,2);delete process.env.MICROLINK_API_KEY;
+});
