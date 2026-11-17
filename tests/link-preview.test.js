@@ -73,3 +73,13 @@ test('creator preview refresh can revalidate a cached profile photo',async()=>{
  const url='https://open.spotify.com/user/fresh_avatar_test';let calls=0;globalThis.fetch=async()=>new Response('<meta property="og:title" content="Profile"><meta property="og:image" content="https://i.scdn.co/image/photo-'+(++calls)+'">');
  const one=await linkPreview(url),cached=await linkPreview(url),fresh=await linkPreview(url,{refresh:true});assert.equal(one.image,cached.image);assert.notEqual(fresh.image,one.image);assert.equal(calls,2);
 });
+
+test('Instagram public metadata retains exact followers, following and posts without inventing abbreviated totals',async()=>{
+ const {instagramCounters}=await import('../lib/link-preview.js');
+ assert.deepEqual(instagramCounters('1,234 Followers, 450 Following, 20 Posts - Public bio'),{followers:1234,following:450,posts:20});
+ assert.deepEqual(instagramCounters('1.234 seguidores, 0 seguindo, 10 publicações'),{followers:1234,following:0,posts:10});
+ const abbreviated=instagramCounters('1.2K Followers, 3M Following, 15 Posts');assert.equal(abbreviated.followers,undefined);assert.equal(abbreviated.followersDisplay,'1.2K');assert.equal(abbreviated.followingDisplay,'3M');
+ assert.deepEqual(instagramCounters('Instagram required login'),{});
+ const row=parseLinkMetadata('<meta property="og:title" content="Public name"><meta property="og:image" content="https://scontent.cdninstagram.com/pic.jpg"><meta property="og:description" content="300 Followers, 100 Following, 12 Posts - My bio">','https://www.instagram.com/public_metadata_test/');
+ assert.equal(row.details.followers,300);assert.equal(row.details.posts,12);assert.equal(row.image,'https://scontent.cdninstagram.com/pic.jpg');
+});

@@ -27,7 +27,7 @@
     $('presence-login').hidden=signed||!presenceSession?.enabled;
     $('presence-session').hidden=!signed;
     if(signed){$('presence-greeting').textContent=(owner()?'OGG | Criador · ':'Conta conectada: ')+presenceSession.profile.name;const image=safeUrl(presenceSession.profile.image,true);$('presence-user-image').hidden=!image;if(image)$('presence-user-image').src=image;}
-    $('owner-login').hidden=owner();$('owner-logout').hidden=!owner();$('owner-access-label').textContent=owner()?'OGG | Criador · conectado':'Acesso do criador';
+    $('owner-login').hidden=owner();$('owner-private-login').hidden=owner();$('owner-logout').hidden=!owner();$('owner-access-label').textContent=owner()?'OGG | Criador · conectado':'Acesso do criador';
     $('owner-composer').hidden=!owner();$('guest-form').hidden=owner();
     $('mural-moderation-option').hidden=!owner();updateGuestControls();
   }

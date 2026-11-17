@@ -706,6 +706,9 @@ function presenceCard(person) {
         if (detail.author) facts.push('Por '+detail.author);
         if (Number.isSafeInteger(detail.trackCount)) facts.push(detail.trackCount.toLocaleString('pt-BR')+' faixas');
         if (Number.isSafeInteger(detail.followers)) facts.push(detail.followers.toLocaleString('pt-BR')+' seguidores');
+        else if(detail.followersDisplay)facts.push(detail.followersDisplay+' seguidores');
+        if(Number.isSafeInteger(detail.following))facts.push(detail.following.toLocaleString('pt-BR')+' seguindo');else if(detail.followingDisplay)facts.push(detail.followingDisplay+' seguindo');
+        if(Number.isSafeInteger(detail.posts))facts.push(detail.posts.toLocaleString('pt-BR')+' publicações');else if(detail.postsDisplay)facts.push(detail.postsDisplay+' publicações');
         if (detail.durationSeconds>0) { const hours=Math.floor(detail.durationSeconds/3600),minutes=Math.floor(detail.durationSeconds%3600/60); facts.push(hours?hours+' h '+minutes+' min':minutes?minutes+' min':detail.durationSeconds+' s'); }
         if (facts.length) text.append(el('small','presence-preview-facts',facts.join(' · ')));
         card.append(text); entry.append(card);

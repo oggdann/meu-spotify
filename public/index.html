@@ -20,9 +20,9 @@
   <link rel="preconnect" href="https://i.scdn.co" crossorigin>
   <link rel="preconnect" href="https://www.youtube.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=ogg-20261116-16">
-  <script src="/app.js?v=ogg-20261116-16" defer></script>
-  <script src="/community.js?v=ogg-20261116-16" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=ogg-20261116-17">
+  <script src="/app.js?v=ogg-20261116-17" defer></script>
+  <script src="/community.js?v=ogg-20261116-17" defer></script>
 </head>
 <body>
   <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -101,7 +101,7 @@
     <section class="presence-section content-section" id="presenca" aria-labelledby="presence-heading">
       <div class="presence-intro"><span class="eyebrow">QUEM COLOU NO MEU SOM</span><h2 id="presence-heading">Passou por aqui?<br><em>Deixa tua presença.</em></h2><p>Colou no som? Deixa teu nome e um salve. Comentário e link do teu perfil são opcionais — sem login.</p></div>
       <div class="presence-panel">
-        <div class="mural-toolbar owner-access-bar"><strong id="owner-access-label">Acesso do criador</strong><a id="owner-login" class="presence-text-btn" href="/api/presenca?acao=entrar">Entrar com Spotify ↗</a><button id="owner-logout" class="presence-text-btn" type="button" hidden>Sair</button></div>
+        <div class="mural-toolbar owner-access-bar"><strong id="owner-access-label">Acesso do criador</strong><a id="owner-login" class="presence-text-btn" href="/api/presenca?acao=entrar">Entrar com Spotify ↗</a><a id="owner-private-login" class="presence-text-btn" href="/criador">Acesso privado ↗</a><button id="owner-logout" class="presence-text-btn" type="button" hidden>Sair</button></div>
         <div class="mural-toolbar"><label for="mural-sort">Ordenar mural</label><select id="mural-sort"><option value="recentes">Mais recentes</option><option value="antigos">Mais antigos</option><option value="curtidos">Mais curtidos</option><option value="respostas">Mais respondidos</option><option value="criador">Criador</option><option id="mural-moderation-option" value="ocultos" hidden>Moderação · ocultos</option></select></div><p id="mural-feedback" class="presence-feedback" role="status"></p>
         <div class="presence-wall" id="presence-wall" aria-live="polite"><p class="presence-empty">O mural tá aberto. O próximo nome pode ser o teu.</p></div>
         <button class="presence-text-btn" id="more-presences" type="button" hidden>Ver mais presenças ↓</button>

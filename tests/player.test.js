@@ -382,3 +382,9 @@ test('owner can open link editing, submit new handles, and see compact replies i
  await find('Respostas 1').listeners.get('click')();
  const reply=walk(h.node('presence-wall')).find(n=>n.classList?.contains('presence-reply'));assert.ok(reply);assert.equal(reply.children.filter(n=>n.className==='presence-preview').length,0);
 });
+
+test('Instagram link previews show available followers, following and posts while compact replies hide those cards',()=>{
+ const h=playerHarness(async()=>new Response('{}'));h.context.metadataPerson={name:'Person',source:'guest',presentAt:Date.now(),instagramUrl:'https://www.instagram.com/metadata_card/',previews:[{url:'https://www.instagram.com/metadata_card/',provider:'Instagram',type:'profile',title:'Profile',details:{followers:1234,following:450,posts:20}}]};
+ const root=h.run('presenceCard(metadataPerson)'),preview=root.children.find(n=>n.className==='presence-preview'),facts=preview.children.find(n=>n.tagName!=='img').children.find(n=>n.className==='presence-preview-facts');
+ assert.match(facts.textContent,/1.234 seguidores/);assert.match(facts.textContent,/450 seguindo/);assert.match(facts.textContent,/20 publicações/);
+});
