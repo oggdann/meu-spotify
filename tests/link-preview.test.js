@@ -61,3 +61,15 @@ test('old comments gain avatars on read with bounded metadata requests and keep 
  await enrichCommentProfiles(rows);assert.equal(calls,2);assert.equal(rows[0].image,'https://i.scdn.co/image/old-person');assert.equal(rows[0].comment,'Original 0');
  await enrichCommentProfiles(rows);assert.equal(calls,4);assert.ok(rows.every(r=>r.image==='https://i.scdn.co/image/old-person'));assert.equal(rows[3].name,'Guest 3');
 });
+
+test('an explicit Instagram photo stays ahead of Spotify and unsafe manual photo hosts are rejected',async()=>{
+ const {commentImageCandidates,instagramImageUrl}=await import('../lib/link-preview.js');
+ const photo='https://scontent.cdninstagram.com/manual.jpg',row={instagramUrl:'https://www.instagram.com/manual_photo/',instagramImage:photo,image:'https://i.scdn.co/image/spotify'};
+ assert.deepEqual(commentImageCandidates(row),[photo,row.image]);assert.equal(instagramImageUrl('https://evil.example/manual.jpg'),null);assert.equal(instagramImageUrl('https://i.scdn.co/image/not-instagram'),null);
+ assert.equal(instagramImageUrl('https://user:pw@scontent.cdninstagram.com/avatar.jpg'),null);assert.equal(instagramImageUrl('https://scontent.cdninstagram.com:444/avatar.jpg'),null);
+ row.instagramUrl=null;assert.deepEqual(commentImageCandidates(row),[row.image]);
+});
+test('creator preview refresh can revalidate a cached profile photo',async()=>{
+ const url='https://open.spotify.com/user/fresh_avatar_test';let calls=0;globalThis.fetch=async()=>new Response('<meta property="og:title" content="Profile"><meta property="og:image" content="https://i.scdn.co/image/photo-'+(++calls)+'">');
+ const one=await linkPreview(url),cached=await linkPreview(url),fresh=await linkPreview(url,{refresh:true});assert.equal(one.image,cached.image);assert.notEqual(fresh.image,one.image);assert.equal(calls,2);
+});

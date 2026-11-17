@@ -2,7 +2,7 @@
 (() => {
   const feed=$('presence-wall'),more=$('more-presences'),sort=$('mural-sort');
   let rows=[],cursor=null,loading=false,generation=0,queued=false;
-  const openThreads=new Map(),editors=new Map();
+  const openThreads=new Map(),editors=new Map(),linkEditors=new Map();
   const requestId=()=>crypto.randomUUID();
   const owner=()=>Boolean(presenceSession?.owner);
   const token=()=>owner()?presenceSession?.csrf:presenceSession?.guest?.csrf||presenceSession?.csrf;
@@ -14,7 +14,7 @@
     return body;
   }
   function message(error){
-    return error.status===403?'Ação não autorizada. Confira a conta conectada.':error.status===429?'Muitas ações em sequência. Aguarde um pouco.':error.code==='identity_not_proven'?'A presença só pode ser identificada no navegador em que foi publicada.':error.code==='name_required'?'Informe seu nome para responder.':'Não foi possível concluir agora. Tente novamente.';
+    return error.code==='invalid_links'?'Confira os links. Na foto, use o endereço direto da imagem do Instagram (cdninstagram.com ou fbcdn.net).':error.status===403?'Ação não autorizada. Confira a conta conectada.':error.status===429?'Muitas ações em sequência. Aguarde um pouco.':error.code==='identity_not_proven'?'A presença só pode ser identificada no navegador em que foi publicada.':error.code==='name_required'?'Informe seu nome para responder.':'Não foi possível concluir agora. Tente novamente.';
   }
   async function act(action,body){
     if(!token())await refresh();
@@ -64,9 +64,20 @@
     form.addEventListener('submit',async event=>{event.preventDefault();save.disabled=true;try{await act('editar',{id:parentId,replyId,text:input.value});editors.delete(key);if(replyId)await loadReplies(parentId,false);render();}catch(error){notice(message(error));save.disabled=false;}});
     return form;
   }
+  function linkEditor(item,parentId,replyId){
+    const key=parentId+':'+(replyId||''),draft=linkEditors.get(key);if(!draft)return null;
+    const form=el('form','mural-editor'),inputs={};
+    for(const [field,label,placeholder] of [['instagramUrl','Instagram','@usuario ou link do perfil'],['spotifyUrl','Spotify','Link do perfil ou playlist'],['instagramImage','Foto do Instagram (opcional)','URL direta da imagem do Instagram']]){
+      const wrap=el('label','',label),input=el('input');input.type='text';input.value=draft[field]||'';input.maxLength=2048;input.placeholder=placeholder;input.setAttribute('aria-label',label);input.addEventListener('input',()=>draft[field]=input.value);inputs[field]=input;wrap.append(input);form.append(wrap);
+    }
+    form.append(el('small','','Instagram tem prioridade. Se a rede bloquear a foto, você pode informar a URL da imagem acima. Sem foto disponível, será usada a alternativa do Spotify.'));
+    const save=el('button','mural-action','Salvar links');save.type='submit';form.append(save,button('Cancelar',()=>{linkEditors.delete(key);render();}));
+    form.addEventListener('submit',async event=>{event.preventDefault();save.disabled=true;try{await act('links',{id:parentId,replyId,...draft});linkEditors.delete(key);if(replyId)await loadReplies(parentId,false);render();notice('Links atualizados.');}catch(error){notice(message(error));save.disabled=false;}});return form;
+  }
   function admin(item,parentId,replyId){
     const details=el('details','mural-admin'),summary=el('summary','','Gerenciar');details.append(summary);
     details.append(button('Editar',()=>{editors.set(parentId+':'+(replyId||''),item.comment||'');render();}));
+    details.append(button('Editar links e foto',()=>{linkEditors.set(parentId+':'+(replyId||''),{instagramUrl:item.instagramUrl||'',spotifyUrl:item.spotifyUrl||'',instagramImage:item.instagramImage||''});render();}));
     if(!item.removed)details.append(button(item.hidden?'Mostrar':'Ocultar',async()=>{
       if(!confirm(item.hidden?'Mostrar este comentário novamente?':'Ocultar este comentário do mural?'))return;
       try{await act('ocultar',{id:parentId,replyId,hidden:!item.hidden});if(replyId)await loadReplies(parentId,false);else await refresh();render();}catch(error){notice(message(error));}
@@ -75,7 +86,7 @@
       if(!confirm('Remover este comentário do mural? O histórico de moderação será preservado.'))return;
       try{await act('excluir',{id:parentId,replyId});if(replyId)await loadReplies(parentId,false);else await refresh();render();}catch(error){notice(message(error));}
     }));
-    if(!replyId&&(item.instagramUrl||item.spotifyUrl))details.append(button('Atualizar prévias',async control=>{control.disabled=true;try{await act('previews',{id:parentId});render();}catch(error){notice(message(error));control.disabled=false;}}));
+    if(!replyId&&(item.instagramUrl||item.spotifyUrl))details.append(button('Atualizar prévias',async control=>{control.disabled=true;try{const data=await act('previews',{id:parentId});render();const photo=(data.entry?.previews||[]).find(p=>p.provider==='Instagram')?.image;notice(photo?'Prévias atualizadas.':'Prévias atualizadas. Se o Instagram bloquear a foto, use Editar links e foto para informá-la.');}catch(error){notice(message(error));control.disabled=false;}}));
     if(item.canClaim&&!replyId)details.append(button('Identificar como minha presença',async()=>{
       if(!confirm('Confirmar que esta presença foi publicada por você neste navegador?'))return;
       try{await act('identificar',{id:parentId});await refresh();}catch(error){notice(message(error));}
@@ -99,7 +110,7 @@
   }
   function card(item,parentId=item.id,replyId){
     const avatar=item.creator?state.library?.profile?.image||item.image:item.image;
-    const node=presenceCard({...item,image:avatar});node.classList.add(replyId?'presence-reply':'community-card');node.dataset.commentId=item.id;
+    const node=presenceCard({...item,image:avatar,compact:Boolean(replyId)});node.classList.add(replyId?'presence-reply':'community-card');node.dataset.commentId=item.id;
     if(item.creator)node.classList.add('is-creator');
     if(item.hidden||item.removed)node.append(el('small','mural-state',item.removed?'Removido do mural':'Oculto'));
     if(item.editedAt)node.append(el('small','mural-state',item.moderationEdit?'Editado pela moderação':'Editado'));
@@ -111,6 +122,7 @@
     }));
     if(owner())actions.append(admin(item,parentId,replyId));node.append(actions);
     const edit=editor(item,parentId,replyId);if(edit)node.append(edit);
+    const links=linkEditor(item,parentId,replyId);if(links)node.append(links);
     if(!replyId&&openThreads.get(item.id)?.open){
       const thread=openThreads.get(item.id),section=el('div','mural-replies');
       thread.items.forEach(reply=>section.append(card(reply,item.id,reply.id)));

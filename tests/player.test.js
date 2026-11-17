@@ -354,3 +354,31 @@ test('comments without public profile photos always render a local avatar',()=>{
  const entry=h.run('presenceCard(avatarPerson)'),image=entry.children[0].children[0].children[0];
  assert.equal(image.src,'/assets/visitor-avatar.svg');assert.equal(image.onerror,null);
 });
+
+test('compact reply cards keep avatar and creator badge without repeated rich link previews',()=>{
+ const h=playerHarness(async()=>new Response('{}'));h.context.replyPerson={name:'ogg',creator:true,compact:true,source:'guest',comment:'Resposta',presentAt:Date.now(),instagramUrl:'https://www.instagram.com/compact_reply/',spotifyUrl:'https://open.spotify.com/user/compact_reply',previews:[{url:'https://www.instagram.com/compact_reply/',provider:'Instagram',title:'Profile'},{url:'https://open.spotify.com/user/compact_reply',provider:'Spotify',title:'Profile'}]};
+ const compact=h.run('presenceCard(replyPerson)');assert.equal(compact.children.filter(n=>n.className==='presence-preview').length,0);assert.equal(compact.children[0].children[0].children[0].src,'/assets/visitor-avatar.svg');
+ h.context.replyPerson.compact=false;assert.equal(h.run('presenceCard(replyPerson)').children.filter(n=>n.className==='presence-preview').length,2);
+});
+
+test('owner can open link editing, submit new handles, and see compact replies in the actual community script',async()=>{
+ const posted=[],instagramUrl='https://www.instagram.com/owner_ui_test/',spotifyUrl='https://open.spotify.com/user/owner_ui_test';
+ const previews=[{provider:'Instagram',url:instagramUrl,title:'Instagram'},{provider:'Spotify',url:spotifyUrl,title:'Spotify'}];
+ const item={id:'ui-root',name:'Visitor',comment:'Text stays',source:'guest',presentAt:Date.now(),instagramUrl,spotifyUrl,previews,replyCount:1};
+ const h=playerHarness(async(url,options={})=>{
+  if(options.method==='POST'){posted.push(JSON.parse(options.body));return new Response(JSON.stringify({ok:true,entry:{...item,instagramUrl:'https://www.instagram.com/edited_ui_user/',previews:[]}}));}
+  if(url.includes('acao=eu'))return new Response(JSON.stringify({owner:true,csrf:'owner-test',enabled:true,profile:{name:'ogg'},guest:{csrf:'guest-test'}}));
+  if(url.includes('acao=respostas'))return new Response(JSON.stringify({items:[{...item,id:'ui-reply',creator:true,name:'ogg',comment:'Small reply'}],next:null}));
+  return new Response(JSON.stringify({items:[item],next:null,total:1}));
+ });
+ const create=h.context.document.createElement;h.context.document.createElement=(...args)=>{const n=create(...args);n.dataset={};return n;};
+ h.context.crypto={randomUUID:()=> 'ui-request-1234'};
+ vm.runInContext(readFileSync('public/community.js','utf8'),h.context);await new Promise(resolve=>setImmediate(resolve));
+ const walk=n=>[n,...(n.children||[]).flatMap(walk)],find=text=>walk(h.node('presence-wall')).find(n=>n.textContent===text);
+ assert.ok(find('Editar links e foto'));find('Editar links e foto').listeners.get('click')();
+ const form=walk(h.node('presence-wall')).find(n=>n.className==='mural-editor');assert.ok(form);
+ const input=walk(form).find(n=>n.placeholder==='@usuario ou link do perfil');input.value='@edited_ui_user';input.listeners.get('input')();
+ await form.listeners.get('submit')({preventDefault(){}});assert.equal(posted[0].instagramUrl,'@edited_ui_user');assert.equal(posted[0].csrf,'owner-test');
+ await find('Respostas 1').listeners.get('click')();
+ const reply=walk(h.node('presence-wall')).find(n=>n.classList?.contains('presence-reply'));assert.ok(reply);assert.equal(reply.children.filter(n=>n.className==='presence-preview').length,0);
+});
