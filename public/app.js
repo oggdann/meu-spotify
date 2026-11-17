@@ -584,7 +584,7 @@ function renderLibrary(data) {
   $('profile-image').alt = `Perfil de ${data.profile.name}`;
   $('playlist-count').textContent = ['ready', 'stale'].includes(data.availability?.playlists) ? String(data.playlists.length) : '—';
   $('playlists-note').textContent = data.availability?.playlists === 'stale' ? 'Última atualização disponível. O Spotify limitou as consultas; as playlists serão atualizadas quando liberar.' : data.playlistsTruncated ? 'Uma seleção das minhas playlists públicas. Tem mais no meu perfil.' : 'Minhas duas playlists. Capas e nomes acompanham as atualizações no Spotify.';
-  renderPlaylists(); renderRecent();
+  renderPlaylists(); renderRecent(); window.oggCommunity?.render();
 }
 $('playlist-search').addEventListener('input', () => { state.playlistLimit = 8; renderPlaylists(); });
 $('more-playlists').addEventListener('click', () => { state.playlistLimit += 8; renderPlaylists(); });
@@ -665,10 +665,7 @@ async function pollStats() {
   catch (error) { retry = Math.max(retry, error.retryAfter * 1000); $('stats-context').textContent = 'Estatísticas temporariamente indisponíveis.'; }
   finally { statsTimer = setTimeout(pollStats, Math.min(retry, 2147483647)); }
 }
-function renderPresence(items) {
-  presenceItems = items || [];
-  const wall = $('presence-wall'); wall.replaceChildren();
-  for (const person of presenceItems.slice(0, presenceLimit)) {
+function presenceCard(person) {
     let guestUrl = null;
     if (person.source === 'guest' && person.url) { try { const parsed = new URL(person.url); if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) guestUrl = parsed.href; } catch {} }
     const link = person.source === 'guest' ? el(guestUrl ? 'a' : 'div') : person.url ? externalLink(person.url, '') : el('div');
@@ -684,9 +681,9 @@ function renderPresence(items) {
     }
     link.append(avatar, copy); if (person.source === 'guest' ? guestUrl : person.url) link.append(icon('arrow'));
     const entry = el('article', 'presence-entry'); entry.append(link);
-    if (person.source === 'guest') copy.append(el('small', '', 'Visitante · perfil informado'));
+    if (person.creator) copy.append(el('small', 'creator-badge', 'OGG | Criador')); else if (person.source === 'guest') copy.append(el('small', '', 'Visitante · perfil informado'));
     if (person.comment) entry.append(el('p', 'presence-comment', person.comment));
-    if (person.source === 'guest') {
+    if (person.source === 'guest' || person.creator) {
       const links = el('div', 'presence-socials');
       for (const [value, label, host] of [[person.instagramUrl,'Instagram ↗','www.instagram.com'],[person.spotifyUrl,person.spotifyUrl?.includes('/playlist/') ? 'Playlist ↗' : 'Spotify ↗','open.spotify.com']]) {
         try { const parsed = new URL(value); if (parsed.protocol !== 'https:' || parsed.hostname !== host || parsed.username || parsed.password) continue;
@@ -701,10 +698,24 @@ function renderPresence(items) {
         if (imageUrl) { const image = el('img'); image.src = imageUrl; image.alt = ''; image.width = image.height = 52; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer'; image.addEventListener('error', () => { image.hidden = true; }, {once:true}); card.append(image); }
         const text = el('span'); text.append(el('small', '', preview.provider + (preview.type === 'playlist' ? ' · Playlist' : ' · Perfil')), el('strong', '', preview.title));
         if (preview.description) text.append(el('span', 'presence-preview-description', preview.description));
+        const facts=[], detail=preview.details||{};
+        if (detail.author) facts.push('Por '+detail.author);
+        if (Number.isSafeInteger(detail.trackCount)) facts.push(detail.trackCount.toLocaleString('pt-BR')+' faixas');
+        if (Number.isSafeInteger(detail.followers)) facts.push(detail.followers.toLocaleString('pt-BR')+' seguidores');
+        if (detail.durationSeconds>0) { const hours=Math.floor(detail.durationSeconds/3600),minutes=Math.floor(detail.durationSeconds%3600/60); facts.push(hours?hours+' h '+minutes+' min':minutes?minutes+' min':detail.durationSeconds+' s'); }
+        if (facts.length) text.append(el('small','presence-preview-facts',facts.join(' · ')));
         card.append(text); entry.append(card);
       }
     }
-    wall.append(entry);
+    return entry;
+}
+function renderPresence(items) {
+  presenceItems = items || [];
+  if (window.oggCommunity) { window.oggCommunity.refresh(); updateGuestControls(); return; }
+  const wall = $('presence-wall'); wall.replaceChildren();
+  for (const person of presenceItems.slice(0, presenceLimit)) {
+    wall.append(presenceCard(person));
+
   }
   if (!presenceItems.length) wall.append(el('p', 'presence-empty', 'O mural tá aberto. O próximo nome pode ser o teu.'));
   $('more-presences').hidden = presenceItems.length <= presenceLimit;
@@ -714,6 +725,7 @@ function renderPresence(items) {
   $('presence-mark').textContent = mine ? 'Minha presença tá marcada' : 'Marcar minha presença';
 }
 async function pollPresence() {
+  if (window.oggCommunity) return window.oggCommunity.refresh();
   if (document.hidden) return;
   const requestId = ++presenceRefreshId;
   const jobs = await Promise.allSettled([getJson('/api/presenca?acao=lista', 12000, {cache:'no-store',credentials:'same-origin'}), getJson('/api/presenca?acao=eu', 12000, {cache:'no-store',credentials:'same-origin'})]);
@@ -817,7 +829,7 @@ async function guestAction(remove = false) {
     $('guest-feedback').textContent = error.status === 429 ? 'Muitos envios por agora. Tenta de novo mais tarde.' : error.status === 409 ? 'Esse perfil já deixou presença no mural. Não vou duplicar o mesmo perfil.' : error.status === 400 ? 'Confere teu nome e os links completos do Instagram ou Spotify. O comentário pode ter até 280 caracteres.' : 'Não consegui salvar agora. Atualiza a página e tenta novamente.';
   } finally { guestBusy = false; updateGuestControls(); }
 }
-$('more-presences').addEventListener('click', () => { presenceLimit += 20; renderPresence(presenceItems); });
+$('more-presences').addEventListener('click', () => { if (window.oggCommunity) return; presenceLimit += 20; renderPresence(presenceItems); });
 $('guest-form').addEventListener('submit', event => { event.preventDefault(); guestAction(); });
 $('guest-remove').addEventListener('click', () => guestAction(true));
 $('presence-mark').addEventListener('click', () => presenceAction('marcar'));

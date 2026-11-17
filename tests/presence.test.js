@@ -97,3 +97,14 @@ test('visitors can share Instagram and a Spotify profile or playlist together wi
 });
 
 test('bare Instagram and Spotify usernames become canonical links',()=>{const p=guestProfile({name:'Dan',instagramUrl:'@oggdann',spotifyUrl:'@ogg'},'id');assert.equal(p.instagramUrl,'https://www.instagram.com/oggdann/');assert.equal(p.spotifyUrl,'https://open.spotify.com/user/ogg');assert.equal(guestProfile({name:'Dan',spotifyUrl:'spotify:playlist:306AubstP6UatfIUhynAX8'},'id').spotifyUrl,'https://open.spotify.com/playlist/306AubstP6UatfIUhynAX8');});
+
+test('owner authority comes from a signed OAuth account, not a submitted name or link',async()=>{
+ const {communityIdentity}=await import('../lib/presence.js');
+ assert.equal(communityIdentity(req('eu',{body:{owner:true,id:'dq78sjzflg084c1ibpjuo8gjc'}})).isOwner,false);
+ const {writeShared}=await import('../lib/service-cache.js');await writeShared('spotify:limit:test-client:/me',null,1);const startData=await start();let calls=0;globalThis.fetch=async()=>++calls===1?json({access_token:'owner-test-token'}):json({...visitor,id:'dq78sjzflg084c1ibpjuo8gjc'});
+ const r=response();await presenceCallback({method:'GET',url:'/api/retorno?code=code&state='+startData.state,headers:{cookie:startData.cookie}},r);
+ const signed=r.headers['Set-Cookie'].find(value=>value.startsWith('__Host-ogg-presence=')).split(';')[0];
+ const identity=communityIdentity(req('eu',{headers:{cookie:signed}}));assert.equal(identity.isOwner,true);assert.equal(identity.profile.id,'dq78sjzflg084c1ibpjuo8gjc');
+ const me=response();await createPresenceHandler()(req('eu',{headers:{cookie:signed}}),me);assert.equal(me.body.owner,true);assert.equal(identity.valid(me.body.csrf),true);assert.equal(identity.valid('forged'),false);
+ assert.equal(communityIdentity(req('eu',{headers:{cookie:signed+'tampered'}})).isOwner,false);
+});

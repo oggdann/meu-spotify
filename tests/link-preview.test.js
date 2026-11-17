@@ -21,3 +21,15 @@ test('an Instagram login page is not published as a visitor profile preview',asy
   globalThis.fetch=async()=>new Response('<meta property="og:title" content="Instagram"><meta property="og:image" content="https://static.cdninstagram.com/logo.png">');
   assert.equal(await linkPreview('https://www.instagram.com/preview_test_guest/'),null);
 });
+
+test('public structured metadata adds real author, counts, duration and followers without guessing',()=>{
+ const url='https://open.spotify.com/playlist/1111111111111111111111';
+ const html='<meta property="og:title" content="My playlist"><script type="application/ld+json">'+JSON.stringify({'@type':'MusicPlaylist',url,author:{name:'OGG'},numTracks:42,duration:'PT2H3M',interactionStatistic:{interactionType:{'@type':'FollowAction'},userInteractionCount:120}})+'</script>';
+ const data=parseLinkMetadata(html,url);assert.deepEqual(data.details,{author:'OGG',trackCount:42,durationSeconds:7380,followers:120});
+ const wrong=parseLinkMetadata(html.replace('numTracks":42','numTracks":"many"'),url);assert.equal(Object.hasOwn(wrong.details,'trackCount'),false);
+});
+test('both social links retain separate usable previews when metadata is blocked',async()=>{
+ globalThis.fetch=async()=>{throw Error('blocked')};const {guestLinkPreviews}=await import('../lib/link-preview.js');
+ const result=await guestLinkPreviews({instagramUrl:'https://www.instagram.com/link_fallback_both/',spotifyUrl:'https://open.spotify.com/user/metadata_fallback_both'});
+ assert.equal(result.length,2);assert.deepEqual(result.map(r=>r.provider),['Instagram','Spotify']);assert.ok(result.every(r=>r.url&&r.metadataAvailable===false));
+});
